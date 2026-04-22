@@ -62,6 +62,24 @@ async def recording(request: Request):
 
     print("🧠 Transcription :", transcript.text)
 
+    category = client.responses.create(
+        model="gpt-4o-mini",
+        input=f"""
+Classe cette demande dans UNE seule catégorie parmi :
+- transport : déplacement, taxi, trajet
+- commerce : achat d’un produit (fleurs, pain, viande, courses, etc.) ou rdv coiffeur
+- service_local : prestation d’un professionnel (plombier, électricien, jardinier, travaux, réparation)
+- mairie : demande administrative, information ou problème dans la commune (problème de voierie, lumière, etc)
+- autre
+
+Demande : {transcript.text}
+
+Réponds uniquement par le nom exact de la catégorie.
+"""
+    )
+
+    print("🏷️ Catégorie :", category.output_text)
+
     return Response(
         content="""
         <Response>
