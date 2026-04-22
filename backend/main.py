@@ -20,7 +20,7 @@ async def twilio_voice(request: Request):
     <Response>
         <Say language="fr-FR" voice="alice">
             Bonjour, vous êtes sur Paulo, l'assistant Paulo conçu pour les Saint-Pauliens.
-            Expliquez simplement votre demande après le bip..
+            Expliquez simplement votre demande après le bip.
         </Say>
         <Record maxLength="120" playBeep="true" />
     </Response>
