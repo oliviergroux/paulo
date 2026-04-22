@@ -97,6 +97,12 @@ Réponds uniquement par le nom exact de la catégorie.
 
     print("🏷️ Catégorie :", category.output_text)
 
+    cur.execute(
+        "INSERT INTO requests (phone, transcription, category) VALUES (%s, %s, %s)",
+        (caller, transcript.text, category.output_text)
+    )
+    conn.commit()
+
     return Response(
         content="""
         <Response>
