@@ -7,21 +7,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from psycopg2.extras import RealDictCursor
 
 import psycopg2
+from psycopg2.extras import RealDictCursor
 
-conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-cur = conn.cursor(cursor_factory=RealDictCursor)
+def get_db_connection():
+    return psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
 
-cur.execute("""
-CREATE TABLE IF NOT EXISTS requests (
-    id SERIAL PRIMARY KEY,
-    phone TEXT,
-    transcription TEXT,
-    category TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-""")
-
-conn.commit()
+with get_db_connection() as conn:
+    with conn.cursor() as cur:
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS requests (
+            id SERIAL PRIMARY KEY,
+            phone TEXT,
+            transcription TEXT,
+            category TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -104,13 +105,12 @@ Réponds uniquement par le nom exact de la catégorie.
 """
     )
 
-    print("🏷️ Catégorie :", category.output_text)
-
-    cur.execute(
-        "INSERT INTO requests (phone, transcription, category) VALUES (%s, %s, %s)",
-        (caller, transcript.text, category.output_text)
-    )
-    conn.commit()
+    with get_db_connection() as conn:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO requests (phone, transcription, category) VALUES (%s, %s, %s)",
+            (caller, transcript.text, category.output_text)
+        )
 
     return Response(
         content="""
@@ -123,10 +123,12 @@ Réponds uniquement par le nom exact de la catégorie.
 
 @app.get("/requests")
 def get_requests():
-    cur.execute("""
-        SELECT id, phone, transcription, category, created_at
-        FROM requests
-        ORDER BY created_at ASC
-    """)
-    rows = cur.fetchall()
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, phone, transcription, category, created_at
+                FROM requests
+                ORDER BY created_at ASC
+            """)
+            rows = cur.fetchall()
     return rows
