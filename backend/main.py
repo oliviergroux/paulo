@@ -3,11 +3,13 @@ from fastapi.responses import Response
 import os
 from openai import OpenAI
 import requests
+from fastapi.middleware.cors import CORSMiddleware
+from psycopg2.extras import RealDictCursor
 
 import psycopg2
 
 conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-cur = conn.cursor()
+cur = conn.cursor(cursor_factory=RealDictCursor)
 
 cur.execute("""
 CREATE TABLE IF NOT EXISTS requests (
@@ -25,6 +27,13 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def root():
@@ -111,3 +120,13 @@ Réponds uniquement par le nom exact de la catégorie.
         """,
         media_type="application/xml"
     )
+
+@app.get("/requests")
+def get_requests():
+    cur.execute("""
+        SELECT id, phone, transcription, category, created_at
+        FROM requests
+        ORDER BY created_at ASC
+    """)
+    rows = cur.fetchall()
+    return rows
