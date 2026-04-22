@@ -46,7 +46,15 @@ async def recording(request: Request):
     print("📞 Appel de :", caller)
     print("🎤 Audio URL :", recording_url)
 
-    audio_file = requests.get(recording_url + ".wav").content
+    audio_file = requests.get(
+    recording_url + ".wav",
+    auth=(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+).content
+
+print("🎧 Content-Type:", requests.get(
+    recording_url + ".wav",
+    auth=(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+).headers.get("Content-Type"))
 
     with open("audio.wav", "wb") as f:
         f.write(audio_file)
