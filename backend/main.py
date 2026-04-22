@@ -4,6 +4,23 @@ import os
 from openai import OpenAI
 import requests
 
+import psycopg2
+
+conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+cur = conn.cursor()
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS requests (
+    id SERIAL PRIMARY KEY,
+    phone TEXT,
+    transcription TEXT,
+    category TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+""")
+
+conn.commit()
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()

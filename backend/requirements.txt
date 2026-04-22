@@ -3,3 +3,4 @@ uvicorn
 python-multipart
 openai
 requests
+psycopg2-binary
