@@ -53,13 +53,21 @@ async def recording(request: Request):
         f.write(audio_file)
 
     # transcription
-    with open("audio.wav", "rb") as f:
-        transcript = client.audio.transcriptions.create(
-            model="gpt-4o-mini-transcribe",
-            file=f
-        )
+        with open("audio.wav", "rb") as f:
+            transcript = client.audio.transcriptions.create(
+                model="gpt-4o-mini-transcribe",
+                file=f
+            )
 
-    print("🧠 Transcription :", transcript.text)
+        print("🧠 Transcription :", transcript.text)
+
+    #summary
+        summary = client.responses.create(
+            model="gpt-5.4-mini",
+            input=f"Résume en une phrase simple cette demande client : {transcript.text}"
+    )
+    
+    print("📦 Résumé :", summary.output_text)
 
     return Response(
         content="""
