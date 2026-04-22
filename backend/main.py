@@ -9,6 +9,8 @@ from psycopg2.extras import RealDictCursor
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
+from fastapi import Body
+
 def get_db_connection():
     return psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
 
@@ -132,3 +134,13 @@ def get_requests():
             """)
             rows = cur.fetchall()
     return rows
+
+@app.post("/requests/{request_id}/status")
+def update_status(request_id: int, status: str = Body(...)):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE requests SET status = %s WHERE id = %s",
+                (status, request_id)
+            )
+    return {"ok": True}
