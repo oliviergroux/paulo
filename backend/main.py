@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 import os
 from openai import OpenAI
+import requests
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -34,10 +35,11 @@ async def twilio_voice(request: Request):
     """
     return Response(content=twiml, media_type="application/xml")
 
-    @app.post("/twilio/recording")
+
+@app.post("/twilio/recording")
 async def recording(request: Request):
     form = await request.form()
-    
+
     recording_url = form.get("RecordingUrl")
     caller = form.get("From")
 
@@ -45,7 +47,6 @@ async def recording(request: Request):
     print("🎤 Audio URL :", recording_url)
 
     # téléchargement audio
-    import requests
     audio_file = requests.get(recording_url + ".wav").content
 
     with open("audio.wav", "wb") as f:
