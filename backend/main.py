@@ -128,8 +128,9 @@ def get_requests():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, phone, transcription, category, status, created_at, handled_at
+                SELECT id, phone, transcription, category, status, created_at, handled_at, archived
                 FROM requests
+                WHERE archived = false
                 ORDER BY created_at ASC
             """)
             rows = cur.fetchall()
@@ -149,4 +150,14 @@ def update_status(request_id: int, status: str = Body(...)):
                     "UPDATE requests SET status = %s WHERE id = %s",
                     (status, request_id)
                 )
+    return {"ok": True}
+
+@app.post("/requests/{request_id}/archive")
+def archive_request(request_id: int):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE requests SET archived = true WHERE id = %s",
+                (request_id,)
+            )
     return {"ok": True}
