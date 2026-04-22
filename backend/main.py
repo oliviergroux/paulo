@@ -46,18 +46,18 @@ async def recording(request: Request):
     print("📞 Appel de :", caller)
     print("🎤 Audio URL :", recording_url)
 
-    # téléchargement audio
     audio_file = requests.get(recording_url + ".wav").content
 
-with open("audio.wav", "wb") as f:
-    f.write(audio_file)
+    with open("audio.wav", "wb") as f:
+        f.write(audio_file)
 
-# transcription
-with open("audio.wav", "rb") as f:
-    transcript = client.audio.transcriptions.create(
-        model="gpt-4o-mini-transcribe",
-        file=f
-    )
+    with open("audio.wav", "rb") as f:
+        transcript = client.audio.transcriptions.create(
+            model="gpt-4o-mini-transcribe",
+            file=f
+        )
+
+    print("🧠 Transcription :", transcript.text)
 
     return Response(
         content="""
