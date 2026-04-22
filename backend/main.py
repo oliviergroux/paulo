@@ -47,14 +47,9 @@ async def recording(request: Request):
     print("🎤 Audio URL :", recording_url)
 
     audio_file = requests.get(
-    recording_url + ".wav",
-    auth=(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-).content
-
-print("🎧 Content-Type:", requests.get(
-    recording_url + ".wav",
-    auth=(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-).headers.get("Content-Type"))
+        recording_url + ".wav",
+        auth=(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+    ).content
 
     with open("audio.wav", "wb") as f:
         f.write(audio_file)
