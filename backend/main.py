@@ -128,7 +128,7 @@ def get_requests():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, phone, transcription, category, created_at
+                SELECT id, phone, transcription, category, status, created_at
                 FROM requests
                 ORDER BY created_at ASC
             """)

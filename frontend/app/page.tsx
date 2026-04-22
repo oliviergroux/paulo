@@ -1,46 +1,86 @@
-async function getRequests() {
-  const res = await fetch("https://paulo-backend.onrender.com/requests", {
-    cache: "no-store",
-  });
+"use client";
 
-  if (!res.ok) {
-    throw new Error("Failed to fetch requests");
-  }
+import { useEffect, useState } from "react";
 
-  return res.json();
-}
+type Request = {
+  id: number;
+  phone: string;
+  transcription: string;
+  category: string;
+  created_at: string;
+  status: string;
+};
 
-export default async function Home() {
-  const requests = await getRequests();
+export default function Home() {
+  const [requests, setRequests] = useState<Request[]>([]);
+
+  const fetchRequests = async () => {
+    const res = await fetch("https://paulo-backend.onrender.com/requests");
+    const data = await res.json();
+    setRequests(data);
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
+  const markAsDone = async (id: number) => {
+    await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify("done"),
+    });
+
+    fetchRequests(); // refresh
+  };
 
   return (
-    <main className="p-8">
+    <main className="p-8 bg-white min-h-screen text-black">
       <h1 className="text-2xl font-bold mb-6">Paulo — Dashboard</h1>
 
-      <div className="overflow-x-auto">
-        <table className="w-full border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100 text-left">
-              <th className="p-3 border">Date</th>
-              <th className="p-3 border">Téléphone</th>
-              <th className="p-3 border">Demande</th>
-              <th className="p-3 border">Catégorie</th>
+      <table className="w-full border border-blue-200">
+        <thead>
+          <tr className="bg-blue-100 text-left">
+            <th className="p-3 border border-blue-200">Date</th>
+            <th className="p-3 border border-blue-200">Téléphone</th>
+            <th className="p-3 border border-blue-200">Demande</th>
+            <th className="p-3 border border-blue-200">Catégorie</th>
+            <th className="p-3 border border-blue-200">Status</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {requests.map((req) => (
+            <tr key={req.id} className="hover:bg-blue-50">
+              <td className="p-3 border border-blue-200">
+                {new Date(req.created_at).toLocaleString()}
+              </td>
+              <td className="p-3 border border-blue-200">{req.phone}</td>
+              <td className="p-3 border border-blue-200">
+                {req.transcription}
+              </td>
+              <td className="p-3 border border-blue-200">{req.category}</td>
+
+              <td className="p-3 border border-blue-200">
+                {req.status === "done" ? (
+                  <span className="text-green-600 font-semibold">
+                    Traité
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => markAsDone(req.id)}
+                    className="bg-blue-500 text-white px-2 py-1 rounded"
+                  >
+                    Marquer traité
+                  </button>
+                )}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {requests.map((req: any) => (
-              <tr key={req.id}>
-                <td className="p-3 border">
-                  {new Date(req.created_at).toLocaleString("fr-FR")}
-                </td>
-                <td className="p-3 border">{req.phone}</td>
-                <td className="p-3 border">{req.transcription}</td>
-                <td className="p-3 border">{req.category}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </main>
   );
 }
