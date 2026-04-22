@@ -106,11 +106,11 @@ Réponds uniquement par le nom exact de la catégorie.
     )
 
     with get_db_connection() as conn:
-    with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO requests (phone, transcription, category) VALUES (%s, %s, %s)",
-            (caller, transcript.text, category.output_text)
-        )
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO requests (phone, transcription, category) VALUES (%s, %s, %s)",
+                (caller, transcript.text, category.output_text)
+            )
 
     return Response(
         content="""
