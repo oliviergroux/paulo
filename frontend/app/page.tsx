@@ -55,7 +55,9 @@ export default function Home() {
           {requests.map((req) => (
             <tr key={req.id} className="hover:bg-blue-50">
               <td className="p-3 border border-blue-200">
-                {new Date(req.created_at).toLocaleString()}
+                {new Date(req.created_at + "Z").toLocaleString("fr-FR", {
+  timeZone: "Europe/Paris",
+})}
               </td>
               <td className="p-3 border border-blue-200">{req.phone}</td>
               <td className="p-3 border border-blue-200">

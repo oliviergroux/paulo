@@ -128,7 +128,7 @@ def get_requests():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, phone, transcription, category, status, created_at
+                SELECT id, phone, transcription, category, status, created_at, handled_at
                 FROM requests
                 ORDER BY created_at ASC
             """)
@@ -139,8 +139,14 @@ def get_requests():
 def update_status(request_id: int, status: str = Body(...)):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE requests SET status = %s WHERE id = %s",
-                (status, request_id)
-            )
+            if status == "done":
+                cur.execute(
+                    "UPDATE requests SET status = %s, handled_at = NOW() WHERE id = %s",
+                    (status, request_id)
+                )
+            else:
+                cur.execute(
+                    "UPDATE requests SET status = %s WHERE id = %s",
+                    (status, request_id)
+                )
     return {"ok": True}
