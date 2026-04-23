@@ -31,13 +31,13 @@ export default function Home() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [selectedPartners, setSelectedPartners] = useState<Record<number, string>>({});
 
-  const isUrgent = (req: Request) => {
-  return req.category === "service_local" || req.category === "mairie";
-};
-
   const seenIdsRef = useRef<Set<number>>(new Set());
   const isFirstLoadRef = useRef(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const isUrgent = (req: Request) => {
+    return req.category === "service_local" || req.category === "mairie";
+  };
 
   const formatDayLabel = (dateString: string) => {
     const date = new Date(dateString + "Z");
@@ -153,6 +153,18 @@ export default function Home() {
     fetchRequests();
   };
 
+  const markAsInProgress = async (id: number) => {
+    await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify("in_progress"),
+    });
+
+    fetchRequests();
+  };
+
   const assignPartner = async (requestId: number) => {
     const partnerId = selectedPartners[requestId];
     if (!partnerId) return;
@@ -244,6 +256,7 @@ export default function Home() {
             >
               <option value="all">Tous statuts</option>
               <option value="new">Nouveau</option>
+              <option value="in_progress">En cours</option>
               <option value="done">Traité</option>
             </select>
 
@@ -307,11 +320,6 @@ export default function Home() {
                         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
                           <div className="space-y-2">
                             <div className="flex flex-wrap items-center gap-2">
-                              {isUrgent(req) && (
-                              <span className="text-xs font-semibold bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                                URGENT
-                              </span>
-                            )}
                               <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                                 {new Date(req.created_at + "Z").toLocaleString("fr-FR", {
                                   timeZone: "Europe/Paris",
@@ -321,6 +329,12 @@ export default function Home() {
                               <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-1 rounded-full">
                                 {req.phone}
                               </span>
+
+                              {isUrgent(req) && (
+                                <span className="text-xs font-semibold bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                                  URGENT
+                                </span>
+                              )}
 
                               <span
                                 className={`text-xs font-medium px-2 py-1 rounded-full ${
@@ -358,26 +372,46 @@ export default function Home() {
                                   Assigné à {req.partner_name}
                                 </a>
 
-                                <div>
+                                <div className="flex flex-wrap gap-2 items-center">
                                   {req.status === "done" ? (
-  <span className="text-green-700 bg-green-100 px-3 py-1 rounded-full text-sm font-medium">
-    Traité
-  </span>
-) : req.status === "in_progress" ? (
-  <span className="text-orange-700 bg-orange-100 px-3 py-1 rounded-full text-sm font-medium">
-    En cours
-  </span>
-) : (
-  <span className="text-gray-700 bg-gray-100 px-3 py-1 rounded-full text-sm font-medium">
-    Nouveau
-  </span>
-)} : (
-                                    <button
-                                      onClick={() => markAsDone(req.id)}
-                                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition shadow-sm"
-                                    >
-                                      Marquer traité
-                                    </button>
+                                    <>
+                                      <span className="text-green-700 bg-green-100 px-3 py-1 rounded-full text-sm font-medium">
+                                        Traité
+                                      </span>
+
+                                      <button
+                                        onClick={() => archiveRequest(req.id)}
+                                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded-xl text-sm transition"
+                                      >
+                                        Archiver
+                                      </button>
+                                    </>
+                                  ) : req.status === "in_progress" ? (
+                                    <>
+                                      <span className="text-orange-700 bg-orange-100 px-3 py-1 rounded-full text-sm font-medium">
+                                        En cours
+                                      </span>
+
+                                      <button
+                                        onClick={() => markAsDone(req.id)}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition shadow-sm"
+                                      >
+                                        Marquer traité
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-gray-700 bg-gray-100 px-3 py-1 rounded-full text-sm font-medium">
+                                        Nouveau
+                                      </span>
+
+                                      <button
+                                        onClick={() => markAsInProgress(req.id)}
+                                        className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-xl transition shadow-sm"
+                                      >
+                                        Prendre
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               </>
@@ -396,7 +430,8 @@ export default function Home() {
                                         [req.id]: e.target.value,
                                       }))
                                     }
-                                    className="w-full border border-gray-300 rounded-xl px-3 py-2 bg-white"
+                                    disabled={!!req.assigned_partner_id}
+                                    className="w-full border border-gray-300 rounded-xl px-3 py-2 bg-white disabled:bg-gray-100 disabled:text-gray-400"
                                   >
                                     <option value="">Choisir un partenaire</option>
                                     {partners
@@ -414,7 +449,12 @@ export default function Home() {
 
                                   <button
                                     onClick={() => assignPartner(req.id)}
-                                    className="w-full bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl transition shadow-sm"
+                                    disabled={!selectedPartners[req.id] || !!req.assigned_partner_id}
+                                    className={`w-full px-4 py-2 rounded-xl text-white transition ${
+                                      !selectedPartners[req.id] || req.assigned_partner_id
+                                        ? "bg-gray-400 cursor-not-allowed"
+                                        : "bg-purple-600 hover:bg-purple-700 shadow-sm"
+                                    }`}
                                   >
                                     Assigner
                                   </button>

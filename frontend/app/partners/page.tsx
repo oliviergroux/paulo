@@ -29,89 +29,177 @@ export default function PartnersPage() {
     fetchPartners();
   }, []);
 
+  const filteredPartners = partners
+    .filter((p) =>
+      categoryFilter === "all" ? true : p.category === categoryFilter
+    )
+    .filter((p) =>
+      activeFilter === "all"
+        ? true
+        : activeFilter === "active"
+        ? p.is_active
+        : !p.is_active
+    );
+
+  const activeCount = partners.filter((p) => p.is_active).length;
+  const inactiveCount = partners.filter((p) => !p.is_active).length;
+  const totalAssigned = partners.reduce(
+    (sum, p) => sum + Number(p.assigned_requests_count || 0),
+    0
+  );
+
   return (
-    <main className="p-8 bg-white min-h-screen text-black">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Paulo — Partenaires</h1>
-        <Link
-          href="/"
-          className="bg-blue-500 text-white px-4 py-2 rounded"
-        >
-          Retour demandes
-        </Link>
-      </div>
+    <main className="min-h-screen bg-[#f6f8fb] text-black">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex flex-col gap-4 mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">
+                Paulo — Partenaires
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                Vue d’ensemble des commerces et partenaires locaux
+              </p>
+            </div>
 
-      <div className="flex gap-4 mb-4">
-        <select
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="border p-2 rounded"
-        >
-          <option value="all">Toutes catégories</option>
-          <option value="commerce">Commerce</option>
-          <option value="service_local">Service local</option>
-          <option value="transport">Transport</option>
-        </select>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
+              >
+                Retour demandes
+              </Link>
+            </div>
+          </div>
 
-        <select
-          onChange={(e) => setActiveFilter(e.target.value)}
-          className="border p-2 rounded"
-        >
-          <option value="all">Tous</option>
-          <option value="active">Actifs</option>
-          <option value="inactive">Inactifs</option>
-        </select>
-      </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-sm text-gray-500">Partenaires actifs</p>
+              <p className="text-2xl font-bold text-green-600 mt-1">
+                {activeCount}
+              </p>
+            </div>
 
-      <table className="w-full border border-blue-200">
-        <thead>
-          <tr className="bg-blue-100 text-left">
-            <th className="p-3 border border-blue-200">Nom</th>
-            <th className="p-3 border border-blue-200">Catégorie</th>
-            <th className="p-3 border border-blue-200">Sous-type</th>
-            <th className="p-3 border border-blue-200">Statut</th>
-            <th className="p-3 border border-blue-200">Demandes</th>
-            <th className="p-3 border border-blue-200">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {partners
-            .filter((p) =>
-              categoryFilter === "all" ? true : p.category === categoryFilter
-            )
-            .filter((p) =>
-              activeFilter === "all"
-                ? true
-                : activeFilter === "active"
-                ? p.is_active
-                : !p.is_active
-            )
-            .map((partner) => (
-              <tr key={partner.id} className="hover:bg-blue-50">
-                <td className="p-3 border border-blue-200">{partner.name}</td>
-                <td className="p-3 border border-blue-200">{partner.category}</td>
-                <td className="p-3 border border-blue-200">{partner.subtype}</td>
-                <td className="p-3 border border-blue-200">
-                  {partner.is_active ? (
-                    <span className="text-green-600 font-medium">Actif</span>
-                  ) : (
-                    <span className="text-red-600 font-medium">Inactif</span>
-                  )}
-                </td>
-                <td className="p-3 border border-blue-200">
-                  {partner.assigned_requests_count}
-                </td>
-                <td className="p-3 border border-blue-200">
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-sm text-gray-500">Partenaires inactifs</p>
+              <p className="text-2xl font-bold text-red-600 mt-1">
+                {inactiveCount}
+              </p>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-sm text-gray-500">Demandes assignées</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {totalAssigned}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-center">
+            <select
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="border border-gray-300 rounded-xl px-3 py-2 bg-white"
+              value={categoryFilter}
+            >
+              <option value="all">Toutes catégories</option>
+              <option value="commerce">Commerce</option>
+              <option value="service_local">Service local</option>
+              <option value="transport">Transport</option>
+            </select>
+
+            <select
+              onChange={(e) => setActiveFilter(e.target.value)}
+              className="border border-gray-300 rounded-xl px-3 py-2 bg-white"
+              value={activeFilter}
+            >
+              <option value="all">Tous</option>
+              <option value="active">Actifs</option>
+              <option value="inactive">Inactifs</option>
+            </select>
+
+            <div className="md:ml-auto text-sm text-gray-500">
+              {filteredPartners.length} partenaire
+              {filteredPartners.length > 1 ? "s" : ""} affiché
+              {filteredPartners.length > 1 ? "s" : ""}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {filteredPartners.map((partner) => (
+            <div
+              key={partner.id}
+              className="rounded-2xl border border-gray-200 shadow-sm bg-white hover:border-blue-200 hover:shadow-md transition-all"
+            >
+              <div className="p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-semibold text-gray-900">
+                      {partner.name}
+                    </h2>
+
+                    <span
+                      className={`text-xs font-medium px-2 py-1 rounded-full ${
+                        partner.category === "commerce"
+                          ? "bg-blue-100 text-blue-700"
+                          : partner.category === "service_local"
+                          ? "bg-orange-100 text-orange-700"
+                          : partner.category === "transport"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {partner.category}
+                    </span>
+
+                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-slate-100 text-slate-700">
+                      {partner.subtype}
+                    </span>
+
+                    {partner.is_active ? (
+                      <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                        Actif
+                      </span>
+                    ) : (
+                      <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                        Inactif
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-sm text-gray-500">
+                    {Number(partner.assigned_requests_count || 0)} demande
+                    {Number(partner.assigned_requests_count || 0) > 1 ? "s" : ""} assignée
+                    {Number(partner.assigned_requests_count || 0) > 1 ? "s" : ""}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2 lg:justify-end">
                   <Link
                     href={`/partners/${partner.id}`}
-                    className="bg-purple-600 text-white px-3 py-1 rounded"
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
                   >
-                    Voir
+                    Voir la fiche
                   </Link>
-                </td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
+
+                  <Link
+                    href={`/partner?partner_id=${partner.id}`}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
+                  >
+                    Vue partenaire
+                  </Link>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {filteredPartners.length === 0 && (
+            <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center text-gray-500 shadow-sm">
+              Aucun partenaire ne correspond aux filtres sélectionnés.
+            </div>
+          )}
+        </div>
+      </div>
     </main>
   );
 }
