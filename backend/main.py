@@ -141,12 +141,12 @@ Réponds uniquement par le sous-type exact.
 
 print("🔎 Sous-type :", subtype.output_text)
 
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO requests (phone, transcription, category, subtype) VALUES (%s, %s, %s, %s)",
-                (caller, transcript.text, category.output_text, subtype.output_text)
-            )
+with get_db_connection() as conn:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO requests (phone, transcription, category, subtype) VALUES (%s, %s, %s, %s)",
+            (caller, transcript.text, category.output_text, subtype.output_text)
+        )
 
     return Response(
         content="""
