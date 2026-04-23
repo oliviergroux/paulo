@@ -53,7 +53,7 @@ async def twilio_voice(request: Request):
     twiml = """
     <Response>
         <Say language="fr-FR" voice="alice">
-            Bonjour, vous êtes sur Paulo. Expliquez votre demande après le bip.
+            Bonjour, vous êtes sur Paulo. Expliquez votre demande après le bip..
         </Say>
         <Record 
             maxLength="120" 
@@ -162,10 +162,22 @@ def get_requests():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, phone, transcription, category, subtype, status, assigned_to, assigned_partner_id, created_at, handled_at, archived
-                FROM requests
-                WHERE archived = false
-                ORDER BY created_at ASC
+                SELECT 
+    r.id,
+    r.phone,
+    r.transcription,
+    r.category,
+    r.subtype,
+    r.status,
+    r.assigned_partner_id,
+    p.name AS partner_name,
+    r.created_at,
+    r.handled_at,
+    r.archived
+FROM requests r
+LEFT JOIN partners p ON r.assigned_partner_id = p.id
+WHERE r.archived = false
+ORDER BY r.created_at ASC
             """)
             rows = cur.fetchall()
     return rows

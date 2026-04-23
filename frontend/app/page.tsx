@@ -11,6 +11,7 @@ type Request = {
   created_at: string;
   status: string;
   assigned_partner_id?: number | null;
+  partner_name?: string;
 };
 
 type Partner = {
@@ -208,7 +209,9 @@ export default function Home() {
 
                 <td className="p-3 border border-blue-200">
                   {req.assigned_partner_id ? (
-                    <span className="text-blue-700 font-medium">Assigné</span>
+                    <span className="text-blue-700 font-medium">
+                      📦 {req.partner_name}
+                    </span>
                   ) : (
                     <div className="flex gap-2">
                       <select
