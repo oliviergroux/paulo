@@ -191,6 +191,11 @@ ORDER BY r.created_at ASC
 
 @app.post("/requests/{request_id}/status")
 def update_status(request_id: int, status: str = Body(...)):
+    allowed_status = ["new", "in_progress", "done"]
+
+    if status not in allowed_status:
+        return {"error": "invalid status"}
+
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             if status == "done":
@@ -203,6 +208,7 @@ def update_status(request_id: int, status: str = Body(...)):
                     "UPDATE requests SET status = %s WHERE id = %s",
                     (status, request_id)
                 )
+
     return {"ok": True}
 
 @app.post("/requests/{request_id}/archive")
