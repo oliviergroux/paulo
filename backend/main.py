@@ -244,3 +244,32 @@ def assign_request(request_id: int, payload: dict = Body(...)):
                 ("partner", partner_id, request_id)
             )
     return {"ok": True}
+
+@app.get("/partners/{partner_id}")
+def get_partner(partner_id: int):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, name, category, subtype, is_active, created_at
+                FROM partners
+                WHERE id = %s
+            """, (partner_id,))
+            partner = cur.fetchone()
+
+    return partner
+
+@app.get("/partners/{partner_id}/requests")
+def get_partner_requests(partner_id: int):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, phone, transcription, category, subtype, status,
+                       created_at, handled_at
+                FROM requests
+                WHERE assigned_partner_id = %s
+                  AND archived = false
+                ORDER BY created_at ASC
+            """, (partner_id,))
+            rows = cur.fetchall()
+
+    return rows

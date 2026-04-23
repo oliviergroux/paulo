@@ -137,8 +137,14 @@ export default function Home() {
         >
           {soundEnabled ? "🔔 Son activé" : "🔕 Son désactivé"}
         </button>
+        <a
+  href="/partners"
+  className="bg-purple-600 text-white px-3 py-2 rounded"
+>
+  Voir partenaires
+</a>
       </div>
-
+      
       <div className="flex gap-4 mb-4">
         <select
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -209,9 +215,12 @@ export default function Home() {
 
                 <td className="p-3 border border-blue-200">
                   {req.assigned_partner_id ? (
-                    <span className="text-blue-700 font-medium">
-                      📦 {req.partner_name}
-                    </span>
+                    <a
+                      href={`/partners/${req.assigned_partner_id}`}
+                      className="text-blue-700 font-medium underline"
+                    >
+                    📦 {req.partner_name}
+                    </a>
                   ) : (
                     <div className="flex gap-2">
                       <select
