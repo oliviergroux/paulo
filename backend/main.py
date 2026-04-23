@@ -162,7 +162,7 @@ def get_requests():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, phone, transcription, category, subtype, status, created_at, handled_at, archived
+                SELECT id, phone, transcription, category, subtype, status, assigned_to, assigned_partner_id, created_at, handled_at, archived
                 FROM requests
                 WHERE archived = false
                 ORDER BY created_at ASC
@@ -193,5 +193,35 @@ def archive_request(request_id: int):
             cur.execute(
                 "UPDATE requests SET archived = true WHERE id = %s",
                 (request_id,)
+            )
+    return {"ok": True}
+
+@app.get("/partners")
+def get_partners():
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, name, category, subtype, is_active
+                FROM partners
+                WHERE is_active = true
+                ORDER BY name ASC
+            """)
+            rows = cur.fetchall()
+    return rows
+
+@app.post("/requests/{request_id}/assign")
+def assign_request(request_id: int, payload: dict = Body(...)):
+    partner_id = payload.get("partner_id")
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE requests
+                SET assigned_to = %s,
+                    assigned_partner_id = %s
+                WHERE id = %s
+                """,
+                ("partner", partner_id, request_id)
             )
     return {"ok": True}
