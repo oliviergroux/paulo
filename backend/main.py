@@ -11,6 +11,13 @@ from psycopg2.extras import RealDictCursor
 
 from fastapi import Body
 
+from twilio.rest import Client as TwilioClient
+twilio_client = TwilioClient(
+    os.getenv("TWILIO_ACCOUNT_SID"),
+    os.getenv("TWILIO_AUTH_TOKEN")
+)
+TWILIO_FROM_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+
 def get_db_connection():
     return psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
 
@@ -233,16 +240,53 @@ def assign_request(request_id: int, payload: dict = Body(...)):
     partner_id = payload.get("partner_id")
 
     with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+
+            # 1. récupérer infos partenaire
+            cur.execute("""
+                SELECT id, name, phone
+                FROM partners
+                WHERE id = %s
+            """, (partner_id,))
+            partner = cur.fetchone()
+
+            # 2. récupérer la demande
+            cur.execute("""
+                SELECT id, transcription, category, subtype
+                FROM requests
+                WHERE id = %s
+            """, (request_id,))
+            req = cur.fetchone()
+
+            # 3. assignation
+            cur.execute("""
                 UPDATE requests
                 SET assigned_to = %s,
                     assigned_partner_id = %s
                 WHERE id = %s
-                """,
-                ("partner", partner_id, request_id)
+            """, ("partner", partner_id, request_id))
+
+    # 4. envoyer SMS (hors connexion DB)
+    if partner and partner["phone"]:
+        message = f"""
+Nouvelle demande Paulo 📩
+
+{req['transcription']}
+
+Catégorie : {req['category']} / {req['subtype']}
+Contact client : {req.get('phone', 'non fourni')}
+        """
+
+        try:
+            twilio_client.messages.create(
+                body=message,
+                from_=TWILIO_FROM_NUMBER,
+                to=partner["phone"]
             )
+            print("📨 SMS envoyé à", partner["name"])
+        except Exception as e:
+            print("❌ Erreur SMS :", e)
+
     return {"ok": True}
 
 @app.get("/partners/{partner_id}")
