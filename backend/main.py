@@ -270,11 +270,6 @@ def assign_request(request_id: int, payload: dict = Body(...)):
     if partner and partner["phone"]:
         message = f"""
 Nouvelle demande Paulo 📩
-
-{req['transcription']}
-
-Catégorie : {req['category']} / {req['subtype']}
-Contact client : {req.get('phone', 'non fourni')}
         """
 
         try:
