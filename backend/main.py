@@ -107,11 +107,45 @@ Réponds uniquement par le nom exact de la catégorie.
 """
     )
 
+    subtype = client.responses.create(
+    model="gpt-4o-mini",
+    input=f"""
+Tu dois extraire un sous-type précis à partir de la demande.
+
+Si category = commerce, réponds par un seul mot parmi :
+- fleuriste
+- boucher
+- tabac_presse
+- poste
+- courses
+- autre
+
+Si category = service_local, réponds par un seul mot parmi :
+- plombier
+- jardinier
+- maçon
+- pisciniste
+- petits_travaux
+- autre
+
+Si category = transport, réponds : taxi
+Si category = mairie, réponds : mairie
+Sinon réponds : autre
+
+Category : {category.output_text}
+Demande : {transcript.text}
+
+Réponds uniquement par le sous-type exact.
+"""
+)
+
+print("🔎 Sous-type :", subtype.output_text)
+
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO requests (phone, transcription, category) VALUES (%s, %s, %s)",
-                (caller, transcript.text, category.output_text)
+                "INSERT INTO requests (phone, transcription, category, subtype) VALUES (%s, %s, %s, %s)",
+                (caller, transcript.text, category.output_text, subtype.output_text)
             )
 
     return Response(
@@ -128,7 +162,7 @@ def get_requests():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, phone, transcription, category, status, created_at, handled_at, archived
+                SELECT id, phone, transcription, category, subtype, status, created_at, handled_at, archived
                 FROM requests
                 WHERE archived = false
                 ORDER BY created_at ASC
