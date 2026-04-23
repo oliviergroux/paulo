@@ -212,7 +212,7 @@ export default function Home() {
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Paulo — Dashboard</h1>
               <p className="text-sm text-gray-500 mt-1">
-                Suivi des demandes habitants et assignation partenaires
+                Suivi des demandes habitants et assignation des partenaires
               </p>
             </div>
 
