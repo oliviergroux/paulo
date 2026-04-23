@@ -213,10 +213,17 @@ def get_partners():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, name, category, subtype, is_active
-                FROM partners
-                WHERE is_active = true
-                ORDER BY name ASC
+                SELECT
+                    p.id,
+                    p.name,
+                    p.category,
+                    p.subtype,
+                    p.is_active,
+                    COUNT(r.id) AS assigned_requests_count
+                FROM partners p
+                LEFT JOIN requests r ON r.assigned_partner_id = p.id AND r.archived = false
+                GROUP BY p.id, p.name, p.category, p.subtype, p.is_active
+                ORDER BY p.name ASC
             """)
             rows = cur.fetchall()
     return rows
