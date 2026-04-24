@@ -30,6 +30,7 @@ export default function PartnerDetailPage() {
 
   const [partner, setPartner] = useState<Partner | null>(null);
   const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const isUrgent = (req: RequestItem) => {
     return req.category === "service_local" || req.category === "mairie";
@@ -37,12 +38,8 @@ export default function PartnerDetailPage() {
 
   const formatDayLabel = (dateString: string) => {
     const date = new Date(dateString + "Z");
-    const parisDate = new Date(
-      date.toLocaleString("en-US", { timeZone: "Europe/Paris" })
-    );
-    const nowParis = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" })
-    );
+    const parisDate = new Date(date.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
+    const nowParis = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" }));
 
     const today = new Date(nowParis);
     today.setHours(0, 0, 0, 0);
@@ -67,19 +64,17 @@ export default function PartnerDetailPage() {
   };
 
   const fetchPartner = async () => {
-    const res = await fetch(
-      `https://paulo-backend.onrender.com/partners/${id}`,
-      { cache: "no-store" }
-    );
+    const res = await fetch(`https://paulo-backend.onrender.com/partners/${id}`, {
+      cache: "no-store",
+    });
     const data = await res.json();
     setPartner(data);
   };
 
   const fetchPartnerRequests = async () => {
-    const res = await fetch(
-      `https://paulo-backend.onrender.com/partners/${id}/requests`,
-      { cache: "no-store" }
-    );
+    const res = await fetch(`https://paulo-backend.onrender.com/partners/${id}/requests`, {
+      cache: "no-store",
+    });
     const data = await res.json();
     setRequests(data);
   };
@@ -97,7 +92,11 @@ export default function PartnerDetailPage() {
     );
   }
 
-  const sortedRequests = [...requests].sort(
+  const filteredRequests = requests.filter((req) =>
+    statusFilter === "all" ? true : req.status === statusFilter
+  );
+
+  const sortedRequests = [...filteredRequests].sort(
     (a, b) =>
       new Date(a.created_at + "Z").getTime() -
       new Date(b.created_at + "Z").getTime()
@@ -132,24 +131,15 @@ export default function PartnerDetailPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Link
-                href="/partners"
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
-              >
+              <Link href="/partners" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl shadow-sm transition">
                 Retour partenaires
               </Link>
 
-              <Link
-                href="/"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
-              >
+              <Link href="/" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition">
                 Retour demandes
               </Link>
 
-              <Link
-                href={`/partner?partner_id=${partner.id}`}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
-              >
+              <Link href={`/partner?partner_id=${partner.id}`} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl shadow-sm transition">
                 Vue partenaire
               </Link>
             </div>
@@ -157,9 +147,7 @@ export default function PartnerDetailPage() {
 
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              <span className="text-lg font-semibold text-gray-900">
-                {partner.name}
-              </span>
+              <span className="text-lg font-semibold text-gray-900">{partner.name}</span>
 
               <span
                 className={`text-xs font-medium px-2 py-1 rounded-full ${
@@ -190,28 +178,57 @@ export default function PartnerDetailPage() {
               )}
             </div>
 
-            <p className="text-sm text-gray-500">
-              Identifiant partenaire : #{partner.id}
-            </p>
+            <p className="text-sm text-gray-500">Identifiant partenaire : #{partner.id}</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <button
+              onClick={() => setStatusFilter("all")}
+              className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
+                statusFilter === "all" ? "border-blue-500 ring-2 ring-blue-100" : "border-gray-200"
+              }`}
+            >
+              <p className="text-sm text-gray-500">Toutes les demandes</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{requests.length}</p>
+            </button>
+
+            <button
+              onClick={() => setStatusFilter(statusFilter === "new" ? "all" : "new")}
+              className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
+                statusFilter === "new" ? "border-blue-500 ring-2 ring-blue-100" : "border-gray-200"
+              }`}
+            >
               <p className="text-sm text-gray-500">Nouvelles demandes</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">{newCount}</p>
-            </div>
+            </button>
 
-            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <button
+              onClick={() =>
+                setStatusFilter(statusFilter === "in_progress" ? "all" : "in_progress")
+              }
+              className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
+                statusFilter === "in_progress"
+                  ? "border-orange-500 ring-2 ring-orange-100"
+                  : "border-gray-200"
+              }`}
+            >
               <p className="text-sm text-gray-500">En cours</p>
               <p className="text-2xl font-bold text-orange-600 mt-1">
                 {inProgressCount}
               </p>
-            </div>
+            </button>
 
-            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <button
+              onClick={() => setStatusFilter(statusFilter === "done" ? "all" : "done")}
+              className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
+                statusFilter === "done"
+                  ? "border-green-500 ring-2 ring-green-100"
+                  : "border-gray-200"
+              }`}
+            >
               <p className="text-sm text-gray-500">Traitées</p>
               <p className="text-2xl font-bold text-green-600 mt-1">{doneCount}</p>
-            </div>
+            </button>
           </div>
         </div>
 
@@ -222,11 +239,7 @@ export default function PartnerDetailPage() {
               <React.Fragment key={dayLabel}>
                 <div className="sticky top-0 z-10 bg-[#f6f8fb] py-2">
                   <div className="flex items-center gap-3">
-                    <div
-                      className={`h-px flex-1 ${
-                        dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"
-                      }`}
-                    />
+                    <div className={`h-px flex-1 ${dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"}`} />
                     <span
                       className={`text-sm font-semibold px-4 py-1.5 rounded-full border ${
                         dayLabel === "Aujourd’hui"
@@ -236,11 +249,7 @@ export default function PartnerDetailPage() {
                     >
                       {dayLabel}
                     </span>
-                    <div
-                      className={`h-px flex-1 ${
-                        dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"
-                      }`}
-                    />
+                    <div className={`h-px flex-1 ${dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"}`} />
                   </div>
                 </div>
 

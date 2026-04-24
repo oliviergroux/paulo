@@ -30,10 +30,10 @@ export default function PartnerDashboardClient() {
 
   const [partner, setPartner] = useState<Partner | null>(null);
   const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const isUrgent = (req: RequestItem) => {
-    return req.category === "service_local" || req.category === "mairie";
-  };
+  const isUrgent = (req: RequestItem) =>
+    req.category === "service_local" || req.category === "mairie";
 
   const formatDayLabel = (dateString: string) => {
     const date = new Date(dateString + "Z");
@@ -91,9 +91,7 @@ export default function PartnerDashboardClient() {
   const markAsInProgress = async (id: number) => {
     await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify("in_progress"),
     });
 
@@ -103,9 +101,7 @@ export default function PartnerDashboardClient() {
   const markAsDone = async (id: number) => {
     await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify("done"),
     });
 
@@ -139,7 +135,11 @@ export default function PartnerDashboardClient() {
     );
   }
 
-  const sortedRequests = [...requests].sort(
+  const filteredRequests = requests.filter((req) =>
+    statusFilter === "all" ? true : req.status === statusFilter
+  );
+
+  const sortedRequests = [...filteredRequests].sort(
     (a, b) =>
       new Date(a.created_at + "Z").getTime() -
       new Date(b.created_at + "Z").getTime()
@@ -193,23 +193,66 @@ export default function PartnerDashboardClient() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-sm text-gray-500">Nouvelles demandes</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{newCount}</p>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <button
+              onClick={() => setStatusFilter("all")}
+              className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
+                statusFilter === "all"
+                  ? "border-blue-500 ring-2 ring-blue-100"
+                  : "border-gray-200"
+              }`}
+            >
+              <p className="text-sm text-gray-500">Toutes</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {requests.length}
+              </p>
+            </button>
 
-            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <button
+              onClick={() => setStatusFilter(statusFilter === "new" ? "all" : "new")}
+              className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
+                statusFilter === "new"
+                  ? "border-blue-500 ring-2 ring-blue-100"
+                  : "border-gray-200"
+              }`}
+            >
+              <p className="text-sm text-gray-500">Nouvelles</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {newCount}
+              </p>
+            </button>
+
+            <button
+              onClick={() =>
+                setStatusFilter(
+                  statusFilter === "in_progress" ? "all" : "in_progress"
+                )
+              }
+              className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
+                statusFilter === "in_progress"
+                  ? "border-orange-500 ring-2 ring-orange-100"
+                  : "border-gray-200"
+              }`}
+            >
               <p className="text-sm text-gray-500">En cours</p>
               <p className="text-2xl font-bold text-orange-600 mt-1">
                 {inProgressCount}
               </p>
-            </div>
+            </button>
 
-            <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <button
+              onClick={() => setStatusFilter(statusFilter === "done" ? "all" : "done")}
+              className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
+                statusFilter === "done"
+                  ? "border-green-500 ring-2 ring-green-100"
+                  : "border-gray-200"
+              }`}
+            >
               <p className="text-sm text-gray-500">Traitées</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">{doneCount}</p>
-            </div>
+              <p className="text-2xl font-bold text-green-600 mt-1">
+                {doneCount}
+              </p>
+            </button>
           </div>
         </div>
 
