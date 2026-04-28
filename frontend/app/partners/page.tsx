@@ -69,6 +69,12 @@ export default function PartnersPage() {
               >
                 Retour demandes
               </Link>
+              <Link
+                href="/devenir-partenaire"
+                className="bg-slate-950 hover:bg-slate-800 text-white px-4 py-2 rounded-xl shadow-sm transition"
+                >
+                Ajouter un partenaire
+                </Link>
             </div>
           </div>
 

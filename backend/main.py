@@ -8,6 +8,9 @@ import psycopg2
 import requests
 import os
 
+from pydantic import BaseModel
+import secrets
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 twilio_client = TwilioClient(
@@ -19,6 +22,13 @@ TWILIO_FROM_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 APP_URL = os.getenv("APP_URL", "https://paulo-app.vercel.app")
 
+class PartnerCreate(BaseModel):
+    name: str
+    siret: str
+    phone: str
+    category: str
+    subtype: str
+    address: str
 
 def get_db_connection():
     return psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
@@ -460,3 +470,39 @@ Réponds uniquement par le sous-type exact.
         """,
         media_type="application/xml"
     )
+
+@app.post("/partners/apply")
+def create_partner_application(partner: PartnerCreate):
+    access_token = secrets.token_urlsafe(32)
+
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                INSERT INTO partners (
+                    name,
+                    siret,
+                    phone,
+                    category,
+                    subtype,
+                    address,
+                    is_active,
+                    access_token
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, false, %s)
+                RETURNING id, name
+            """, (
+                partner.name,
+                partner.siret,
+                partner.phone,
+                partner.category,
+                partner.subtype,
+                partner.address,
+                access_token
+            ))
+
+            new_partner = cur.fetchone()
+
+    return {
+        "ok": True,
+        "partner": new_partner
+    }
