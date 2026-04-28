@@ -35,18 +35,13 @@ export default function Home() {
   const isFirstLoadRef = useRef(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const isUrgent = (req: Request) => {
-    return req.category === "service_local" || req.category === "mairie";
-  };
+  const isUrgent = (req: Request) =>
+    req.category === "service_local" || req.category === "mairie";
 
   const formatDayLabel = (dateString: string) => {
     const date = new Date(dateString + "Z");
-    const parisDate = new Date(
-      date.toLocaleString("en-US", { timeZone: "Europe/Paris" })
-    );
-    const nowParis = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" })
-    );
+    const parisDate = new Date(date.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
+    const nowParis = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" }));
 
     const today = new Date(nowParis);
     today.setHours(0, 0, 0, 0);
@@ -69,6 +64,14 @@ export default function Home() {
       year: "numeric",
     });
   };
+
+  const todayCount = requests.filter(
+    (req) => formatDayLabel(req.created_at) === "Aujourd’hui"
+  ).length;
+
+  const urgentCount = requests.filter(isUrgent).length;
+  const inProgressCount = requests.filter((r) => r.status === "in_progress").length;
+  const doneCount = requests.filter((r) => r.status === "done").length;
 
   const filteredRequests = requests
     .filter((req) => (statusFilter === "all" ? true : req.status === statusFilter))
@@ -108,15 +111,12 @@ export default function Home() {
 
     if (trulyNew.length > 0) {
       const newRequestIds = trulyNew.map((req) => req.id);
-
       setHighlightedIds((prev) => [...new Set([...prev, ...newRequestIds])]);
 
       if (soundEnabled && audioRef.current) {
         try {
           audioRef.current.currentTime = 0;
-          audioRef.current.play().catch((err) => {
-            console.log("Audio blocked:", err);
-          });
+          audioRef.current.play().catch((err) => console.log("Audio blocked:", err));
         } catch (err) {
           console.log("Audio error:", err);
         }
@@ -144,9 +144,7 @@ export default function Home() {
   const markAsDone = async (id: number) => {
     await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify("done"),
     });
 
@@ -156,9 +154,7 @@ export default function Home() {
   const markAsInProgress = async (id: number) => {
     await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify("in_progress"),
     });
 
@@ -171,9 +167,7 @@ export default function Home() {
 
     await fetch(`https://paulo-backend.onrender.com/requests/${requestId}/assign`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ partner_id: Number(partnerId) }),
     });
 
@@ -205,271 +199,334 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[#f6f8fb] text-black">
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex flex-col gap-4 mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">Paulo — Dashboard</h1>
-              <p className="text-sm text-gray-500 mt-1">
-                Suivi des demandes habitants et assignation des partenaires
+    <main className="min-h-screen bg-slate-950 text-slate-950">
+      <div className="flex min-h-screen">
+        <aside className="hidden lg:flex w-72 flex-col border-r border-white/10 bg-slate-950 text-white">
+          <div className="p-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-blue-500 flex items-center justify-center font-bold">
+                P
+              </div>
+              <div>
+                <p className="font-semibold text-lg">Paulo</p>
+                <p className="text-xs text-slate-400">Local request hub</p>
+              </div>
+            </div>
+          </div>
+
+          <nav className="px-4 space-y-2">
+            <a href="/" className="block rounded-2xl bg-white/10 px-4 py-3 text-sm font-medium">
+              Dashboard
+            </a>
+            <a
+              href="/partners"
+              className="block rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 hover:bg-white/10"
+            >
+              Partenaires
+            </a>
+          </nav>
+
+          <div className="mt-auto p-4">
+            <div className="rounded-3xl bg-white/10 p-4">
+              <p className="text-sm font-medium">Live monitoring</p>
+              <p className="text-xs text-slate-400 mt-1">
+                Mise à jour automatique toutes les 2 secondes.
               </p>
             </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <a
-                href="/partners"
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
-              >
-                Voir partenaires
-              </a>
-
-              <button
-                onClick={async () => {
-                  const next = !soundEnabled;
-                  setSoundEnabled(next);
-
-                  if (next && audioRef.current) {
-                    try {
-                      audioRef.current.currentTime = 0;
-                      await audioRef.current.play();
-                    } catch (err) {
-                      console.log("Audio init blocked:", err);
-                    }
-                  }
-                }}
-                className={`px-4 py-2 rounded-xl text-white shadow-sm transition ${
-                  soundEnabled
-                    ? "bg-green-600 hover:bg-green-700"
-                    : "bg-gray-500 hover:bg-gray-600"
-                }`}
-              >
-                {soundEnabled ? "🔔 Son activé" : "🔕 Son désactivé"}
-              </button>
-            </div>
           </div>
+        </aside>
 
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-center">
-            <select
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="border border-gray-300 rounded-xl px-3 py-2 bg-white"
-            >
-              <option value="all">Tous statuts</option>
-              <option value="new">Nouveau</option>
-              <option value="in_progress">En cours</option>
-              <option value="done">Traité</option>
-            </select>
-
-            <select
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="border border-gray-300 rounded-xl px-3 py-2 bg-white"
-            >
-              <option value="all">Toutes catégories</option>
-              <option value="transport">Transport</option>
-              <option value="commerce">Commerce</option>
-              <option value="service_local">Service local</option>
-              <option value="mairie">Mairie</option>
-            </select>
-
-            <div className="md:ml-auto text-sm text-gray-500">
-              Mise à jour automatique toutes les 2 secondes
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-8">
-          {Object.entries(groupedRequests)
-            .reverse()
-            .map(([dayLabel, dayRequests]) => (
-              <React.Fragment key={dayLabel}>
-                <div className="sticky top-0 z-10 bg-[#f6f8fb] py-2">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`h-px flex-1 ${
-                        dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"
-                      }`}
-                    />
-                    <span
-                      className={`text-sm font-semibold px-4 py-1.5 rounded-full border ${
-                        dayLabel === "Aujourd’hui"
-                          ? "text-white bg-blue-600 border-blue-600 shadow-sm"
-                          : "text-gray-700 bg-white border-gray-300"
-                      }`}
-                    >
-                      {dayLabel}
-                    </span>
-                    <div
-                      className={`h-px flex-1 ${
-                        dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"
-                      }`}
-                    />
-                  </div>
+        <section className="flex-1 bg-[#f6f8fb]">
+          <div className="max-w-7xl mx-auto px-5 md:px-8 py-8">
+            <header className="mb-8">
+              <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5">
+                <div>
+                  <p className="text-sm font-medium text-blue-600 mb-1">
+                    Centre opérationnel
+                  </p>
+                  <h1 className="text-4xl font-bold tracking-tight text-slate-950">
+                    Demandes entrantes
+                  </h1>
+                  <p className="text-slate-500 mt-2">
+                    Téléphone, WhatsApp, qualification IA et dispatch partenaires.
+                  </p>
                 </div>
 
-                <div className="space-y-3">
-                  {dayRequests.map((req) => (
-                    <div
-                      key={req.id}
-                      className={`rounded-2xl border shadow-sm bg-white transition-all ${
-                        highlightedIds.includes(req.id)
-                          ? "border-yellow-300 bg-yellow-50 animate-fade-in-row"
-                          : "border-gray-200 hover:border-blue-200 hover:shadow-md"
-                      }`}
-                    >
-                      <div className="p-4 flex flex-col gap-4">
-                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
-                                {new Date(req.created_at + "Z").toLocaleString("fr-FR", {
-                                  timeZone: "Europe/Paris",
-                                })}
-                              </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <a
+                    href="/partners"
+                    className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-medium shadow-sm hover:bg-slate-800 transition"
+                  >
+                    Voir partenaires
+                  </a>
 
-                              <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-1 rounded-full">
-                                {req.phone}
-                              </span>
+                  <button
+                    onClick={async () => {
+                      const next = !soundEnabled;
+                      setSoundEnabled(next);
 
-                              {isUrgent(req) && (
-                                <span className="text-xs font-semibold bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                                  URGENT
-                                </span>
-                              )}
+                      if (next && audioRef.current) {
+                        try {
+                          audioRef.current.currentTime = 0;
+                          await audioRef.current.play();
+                        } catch (err) {
+                          console.log("Audio init blocked:", err);
+                        }
+                      }
+                    }}
+                    className={`rounded-2xl px-5 py-3 text-sm font-medium shadow-sm transition ${
+                      soundEnabled
+                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                        : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {soundEnabled ? "🔔 Son activé" : "🔕 Son désactivé"}
+                  </button>
+                </div>
+              </div>
 
-                              <span
-                                className={`text-xs font-medium px-2 py-1 rounded-full ${
-                                  req.category === "commerce"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : req.category === "service_local"
-                                    ? "bg-orange-100 text-orange-700"
-                                    : req.category === "mairie"
-                                    ? "bg-violet-100 text-violet-700"
-                                    : req.category === "transport"
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-gray-100 text-gray-700"
-                                }`}
-                              >
-                                {req.category}
-                              </span>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+                <div className="rounded-3xl bg-white border border-slate-200 p-5 shadow-sm">
+                  <p className="text-sm text-slate-500">Demandes du jour</p>
+                  <p className="text-3xl font-bold mt-2">{todayCount}</p>
+                </div>
 
-                              <span className="text-xs font-medium px-2 py-1 rounded-full bg-slate-100 text-slate-700">
-                                {req.subtype || "autre"}
-                              </span>
-                            </div>
+                <div className="rounded-3xl bg-white border border-slate-200 p-5 shadow-sm">
+                  <p className="text-sm text-slate-500">Urgentes</p>
+                  <p className="text-3xl font-bold mt-2 text-red-600">{urgentCount}</p>
+                </div>
 
-                            <p className="text-[15px] leading-6 text-gray-900">
-                              {req.transcription}
-                            </p>
-                          </div>
+                <div className="rounded-3xl bg-white border border-slate-200 p-5 shadow-sm">
+                  <p className="text-sm text-slate-500">En cours</p>
+                  <p className="text-3xl font-bold mt-2 text-orange-600">
+                    {inProgressCount}
+                  </p>
+                </div>
 
-                          <div className="flex flex-col gap-3 w-full lg:w-[320px] shrink-0">
-                            {req.assigned_partner_id ? (
-                              <>
-                                <a
-                                  href={`/partners/${req.assigned_partner_id}`}
-                                  className="text-sm font-medium text-blue-700 underline underline-offset-2"
-                                >
-                                  Assigné à {req.partner_name}
-                                </a>
+                <div className="rounded-3xl bg-white border border-slate-200 p-5 shadow-sm">
+                  <p className="text-sm text-slate-500">Traitées</p>
+                  <p className="text-3xl font-bold mt-2 text-emerald-600">{doneCount}</p>
+                </div>
+              </div>
 
-                                <div className="flex flex-wrap gap-2 items-center">
-                                  {req.status === "done" ? (
-                                    <>
-                                      <span className="text-green-700 bg-green-100 px-3 py-1 rounded-full text-sm font-medium">
-                                        Traité
-                                      </span>
+              <div className="mt-5 rounded-3xl bg-white border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-center">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+                >
+                  <option value="all">Tous statuts</option>
+                  <option value="new">Nouveau</option>
+                  <option value="in_progress">En cours</option>
+                  <option value="done">Traité</option>
+                </select>
 
-                                      <button
-                                        onClick={() => archiveRequest(req.id)}
-                                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded-xl text-sm transition"
-                                      >
-                                        Archiver
-                                      </button>
-                                    </>
-                                  ) : req.status === "in_progress" ? (
-                                    <>
-                                      <span className="text-orange-700 bg-orange-100 px-3 py-1 rounded-full text-sm font-medium">
-                                        En cours
-                                      </span>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+                >
+                  <option value="all">Toutes catégories</option>
+                  <option value="transport">Transport</option>
+                  <option value="commerce">Commerce</option>
+                  <option value="service_local">Service local</option>
+                  <option value="mairie">Mairie</option>
+                </select>
 
-                                      <button
-                                        onClick={() => markAsDone(req.id)}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition shadow-sm"
-                                      >
-                                        Marquer traité
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <span className="text-gray-700 bg-gray-100 px-3 py-1 rounded-full text-sm font-medium">
-                                        Nouveau
-                                      </span>
+                <div className="md:ml-auto text-sm text-slate-500">
+                  {filteredRequests.length} demande
+                  {filteredRequests.length > 1 ? "s" : ""} affichée
+                  {filteredRequests.length > 1 ? "s" : ""}
+                </div>
+              </div>
+            </header>
 
-                                      <button
-                                        onClick={() => markAsInProgress(req.id)}
-                                        className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 rounded-xl transition shadow-sm"
-                                      >
-                                        Prendre
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
-                              </>
-                            ) : (
-                              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-3">
-                                <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
-                                  Assignation
-                                </p>
-
-                                <div className="flex flex-col gap-2">
-                                  <select
-                                    value={selectedPartners[req.id] || ""}
-                                    onChange={(e) =>
-                                      setSelectedPartners((prev) => ({
-                                        ...prev,
-                                        [req.id]: e.target.value,
-                                      }))
-                                    }
-                                    disabled={!!req.assigned_partner_id}
-                                    className="w-full border border-gray-300 rounded-xl px-3 py-2 bg-white disabled:bg-gray-100 disabled:text-gray-400"
-                                  >
-                                    <option value="">Choisir un partenaire</option>
-                                    {partners
-                                      .filter(
-                                        (p) =>
-                                          p.category === req.category &&
-                                          (req.subtype ? p.subtype === req.subtype : true)
-                                      )
-                                      .map((partner) => (
-                                        <option key={partner.id} value={partner.id}>
-                                          {partner.name}
-                                        </option>
-                                      ))}
-                                  </select>
-
-                                  <button
-                                    onClick={() => assignPartner(req.id)}
-                                    disabled={!selectedPartners[req.id] || !!req.assigned_partner_id}
-                                    className={`w-full px-4 py-2 rounded-xl text-white transition ${
-                                      !selectedPartners[req.id] || req.assigned_partner_id
-                                        ? "bg-gray-400 cursor-not-allowed"
-                                        : "bg-purple-600 hover:bg-purple-700 shadow-sm"
-                                    }`}
-                                  >
-                                    Assigner
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+            <div className="space-y-8">
+              {Object.entries(groupedRequests)
+                .reverse()
+                .map(([dayLabel, dayRequests]) => (
+                  <React.Fragment key={dayLabel}>
+                    <div className="sticky top-0 z-20 bg-[#f6f8fb]/95 backdrop-blur py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-px flex-1 bg-slate-200" />
+                        <span
+                          className={`text-sm font-semibold px-4 py-1.5 rounded-full border ${
+                            dayLabel === "Aujourd’hui"
+                              ? "text-white bg-slate-950 border-slate-950 shadow-sm"
+                              : "text-slate-700 bg-white border-slate-200"
+                          }`}
+                        >
+                          {dayLabel}
+                        </span>
+                        <div className="h-px flex-1 bg-slate-200" />
                       </div>
                     </div>
-                  ))}
-                </div>
-              </React.Fragment>
-            ))}
-        </div>
+
+                    <div className="space-y-4">
+                      {dayRequests.map((req) => (
+                        <article
+                          key={req.id}
+                          className={`rounded-[28px] border bg-white shadow-sm transition-all ${
+                            highlightedIds.includes(req.id)
+                              ? "border-yellow-300 bg-yellow-50 animate-fade-in-row"
+                              : "border-slate-200 hover:border-blue-200 hover:shadow-md"
+                          }`}
+                        >
+                          <div className="p-5 md:p-6 grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-6">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2 mb-4">
+                                {isUrgent(req) && (
+                                  <span className="text-xs font-bold bg-red-100 text-red-700 px-3 py-1 rounded-full">
+                                    URGENT
+                                  </span>
+                                )}
+
+                                <span className="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                                  {new Date(req.created_at + "Z").toLocaleString("fr-FR", {
+                                    timeZone: "Europe/Paris",
+                                  })}
+                                </span>
+
+                                <span className="text-xs font-medium text-slate-700 bg-slate-100 px-3 py-1 rounded-full">
+                                  {req.phone}
+                                </span>
+
+                                <span
+                                  className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                                    req.category === "commerce"
+                                      ? "bg-blue-100 text-blue-700"
+                                      : req.category === "service_local"
+                                      ? "bg-orange-100 text-orange-700"
+                                      : req.category === "mairie"
+                                      ? "bg-violet-100 text-violet-700"
+                                      : req.category === "transport"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : "bg-slate-100 text-slate-700"
+                                  }`}
+                                >
+                                  {req.category}
+                                </span>
+
+                                <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
+                                  {req.subtype || "autre"}
+                                </span>
+                              </div>
+
+                              <p className="text-lg leading-7 text-slate-900">
+                                {req.transcription}
+                              </p>
+                            </div>
+
+                            <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
+                              {req.assigned_partner_id ? (
+                                <div className="space-y-4">
+                                  <div>
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                                      Assignation
+                                    </p>
+                                    <a
+                                      href={`/partners/${req.assigned_partner_id}`}
+                                      className="text-sm font-semibold text-blue-700 underline underline-offset-2"
+                                    >
+                                      Assigné à {req.partner_name}
+                                    </a>
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-2 items-center">
+                                    {req.status === "done" ? (
+                                      <>
+                                        <span className="text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full text-sm font-semibold">
+                                          Traité
+                                        </span>
+                                        <button
+                                          onClick={() => archiveRequest(req.id)}
+                                          className="bg-white border border-slate-200 hover:bg-slate-100 text-slate-800 px-4 py-2 rounded-2xl text-sm font-medium transition"
+                                        >
+                                          Archiver
+                                        </button>
+                                      </>
+                                    ) : req.status === "in_progress" ? (
+                                      <>
+                                        <span className="text-orange-700 bg-orange-100 px-3 py-1 rounded-full text-sm font-semibold">
+                                          En cours
+                                        </span>
+                                        <button
+                                          onClick={() => markAsDone(req.id)}
+                                          className="bg-slate-950 hover:bg-slate-800 text-white px-4 py-2 rounded-2xl text-sm font-medium transition"
+                                        >
+                                          Marquer traité
+                                        </button>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-slate-700 bg-white border border-slate-200 px-3 py-1 rounded-full text-sm font-semibold">
+                                          Nouveau
+                                        </span>
+                                        <button
+                                          onClick={() => markAsInProgress(req.id)}
+                                          className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-2xl text-sm font-medium transition"
+                                        >
+                                          Prendre
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                                    Assigner à un partenaire
+                                  </p>
+
+                                  <div className="space-y-3">
+                                    <select
+                                      value={selectedPartners[req.id] || ""}
+                                      onChange={(e) =>
+                                        setSelectedPartners((prev) => ({
+                                          ...prev,
+                                          [req.id]: e.target.value,
+                                        }))
+                                      }
+                                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+                                    >
+                                      <option value="">Choisir un partenaire</option>
+                                      {partners
+                                        .filter(
+                                          (p) =>
+                                            p.category === req.category &&
+                                            (req.subtype ? p.subtype === req.subtype : true)
+                                        )
+                                        .map((partner) => (
+                                          <option key={partner.id} value={partner.id}>
+                                            {partner.name}
+                                          </option>
+                                        ))}
+                                    </select>
+
+                                    <button
+                                      onClick={() => assignPartner(req.id)}
+                                      disabled={!selectedPartners[req.id]}
+                                      className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold text-white transition ${
+                                        !selectedPartners[req.id]
+                                          ? "bg-slate-300 cursor-not-allowed"
+                                          : "bg-blue-600 hover:bg-blue-700 shadow-sm"
+                                      }`}
+                                    >
+                                      Assigner la demande
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </React.Fragment>
+                ))}
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );
