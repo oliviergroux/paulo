@@ -35,6 +35,59 @@ def get_db_connection():
     return psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
 
 
+def normalize_french_phone(phone: str):
+    if not phone:
+        return None
+
+    cleaned = (
+        phone.strip()
+        .replace(" ", "")
+        .replace(".", "")
+        .replace("-", "")
+        .replace("/", "")
+        .replace("(", "")
+        .replace(")", "")
+    )
+
+    if cleaned.startswith("whatsapp:"):
+        cleaned = cleaned.replace("whatsapp:", "")
+
+    if cleaned.startswith("+33"):
+        return cleaned
+
+    if cleaned.startswith("0033"):
+        return "+" + cleaned[2:]
+
+    if cleaned.startswith("0") and len(cleaned) == 10:
+        return "+33" + cleaned[1:]
+
+    return cleaned
+
+
+def get_phone_type(phone: str):
+    normalized = normalize_french_phone(phone)
+
+    if not normalized:
+        return "unknown"
+
+    if normalized.startswith("+336") or normalized.startswith("+337"):
+        return "mobile"
+
+    if (
+        normalized.startswith("+331")
+        or normalized.startswith("+332")
+        or normalized.startswith("+333")
+        or normalized.startswith("+334")
+        or normalized.startswith("+335")
+    ):
+        return "landline"
+
+    if normalized.startswith("+339"):
+        return "voip"
+
+    return "unknown"
+
+
 app = FastAPI()
 
 app.add_middleware(
@@ -79,9 +132,6 @@ async def recording(request: Request):
 
     recording_url = form.get("RecordingUrl")
     caller = form.get("From")
-
-    print("📞 Appel de :", caller)
-    print("🎤 Audio URL :", recording_url)
 
     audio_file = requests.get(
         recording_url + ".wav",
@@ -334,14 +384,15 @@ def get_partners():
                     p.is_active,
                     p.siret,
                     p.phone,
+                    p.phone_type,
                     p.address,
                     COUNT(r.id) AS assigned_requests_count
                 FROM partners p
                 LEFT JOIN requests r
                     ON r.assigned_partner_id = p.id
                     AND r.archived = false
-                GROUP BY p.id, p.name, p.category, p.subtype, p.is_active, p.siret, p.phone, p.address
-                ORDER BY p.name ASC
+                GROUP BY p.id, p.name, p.category, p.subtype, p.is_active, p.siret, p.phone, p.phone_type, p.address
+                ORDER BY p.is_active ASC, p.name ASC
             """)
             rows = cur.fetchall()
 
@@ -355,6 +406,8 @@ def create_partner_application(partner: PartnerCreate):
     if partner.category not in allowed_categories:
         return {"ok": False, "error": "invalid_category"}
 
+    normalized_phone = normalize_french_phone(partner.phone)
+    phone_type = get_phone_type(partner.phone)
     access_token = secrets.token_urlsafe(32)
 
     with get_db_connection() as conn:
@@ -364,18 +417,20 @@ def create_partner_application(partner: PartnerCreate):
                     name,
                     siret,
                     phone,
+                    phone_type,
                     category,
                     subtype,
                     address,
                     is_active,
                     access_token
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, false, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, false, %s)
                 RETURNING id, name
             """, (
                 partner.name.strip(),
                 partner.siret.strip(),
-                partner.phone.strip(),
+                normalized_phone,
+                phone_type,
                 partner.category.strip(),
                 partner.subtype.strip(),
                 partner.address.strip(),
@@ -390,6 +445,38 @@ def create_partner_application(partner: PartnerCreate):
     }
 
 
+@app.post("/partners/{partner_id}/activate")
+def activate_partner(partner_id: int):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE partners
+                SET is_active = true
+                WHERE id = %s
+                """,
+                (partner_id,)
+            )
+
+    return {"ok": True}
+
+
+@app.post("/partners/{partner_id}/deactivate")
+def deactivate_partner(partner_id: int):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE partners
+                SET is_active = false
+                WHERE id = %s
+                """,
+                (partner_id,)
+            )
+
+    return {"ok": True}
+
+
 @app.post("/requests/{request_id}/assign")
 def assign_request(request_id: int, payload: dict = Body(...)):
     partner_id = payload.get("partner_id")
@@ -397,7 +484,7 @@ def assign_request(request_id: int, payload: dict = Body(...)):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, name, phone, access_token
+                SELECT id, name, phone, phone_type, access_token, is_active
                 FROM partners
                 WHERE id = %s
             """, (partner_id,))
@@ -412,6 +499,9 @@ def assign_request(request_id: int, payload: dict = Body(...)):
 
             if not partner or not req:
                 return {"error": "not_found"}
+
+            if not partner["is_active"]:
+                return {"error": "partner_inactive"}
 
             cur.execute("""
                 UPDATE requests
@@ -436,7 +526,9 @@ Voir la demande :
 {partner_url}
 """
 
-    if partner["phone"]:
+    phone_type = partner["phone_type"] or get_phone_type(partner["phone"])
+
+    if partner["phone"] and phone_type == "mobile":
         try:
             twilio_client.messages.create(
                 body=message,
@@ -457,6 +549,8 @@ Voir la demande :
                 print("💬 WhatsApp envoyé à", partner["name"])
             except Exception as e:
                 print("❌ Erreur WhatsApp :", e)
+    else:
+        print("⚠️ Pas de SMS/WhatsApp : numéro non mobile", partner["phone"])
 
     return {"ok": True}
 
@@ -467,7 +561,7 @@ def get_partner(partner_id: int, token: str = ""):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT id, name, category, subtype, is_active, created_at,
-                       access_token, siret, phone, address
+                       access_token, siret, phone, phone_type, address
                 FROM partners
                 WHERE id = %s
             """, (partner_id,))
