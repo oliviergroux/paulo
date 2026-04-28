@@ -32,14 +32,17 @@ export default function PartnerDetailPage() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const isUrgent = (req: RequestItem) => {
-    return req.category === "service_local" || req.category === "mairie";
-  };
+  const isUrgent = (req: RequestItem) =>
+    req.category === "service_local" || req.category === "mairie";
 
   const formatDayLabel = (dateString: string) => {
     const date = new Date(dateString + "Z");
-    const parisDate = new Date(date.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
-    const nowParis = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" }));
+    const parisDate = new Date(
+      date.toLocaleString("en-US", { timeZone: "Europe/Paris" })
+    );
+    const nowParis = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Europe/Paris" })
+    );
 
     const today = new Date(nowParis);
     today.setHours(0, 0, 0, 0);
@@ -64,19 +67,29 @@ export default function PartnerDetailPage() {
   };
 
   const fetchPartner = async () => {
-    const res = await fetch(`https://paulo-backend.onrender.com/partners/${id}`, {
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `https://paulo-backend.onrender.com/partners/${id}`,
+      { cache: "no-store" }
+    );
     const data = await res.json();
     setPartner(data);
   };
 
   const fetchPartnerRequests = async () => {
-    const res = await fetch(`https://paulo-backend.onrender.com/partners/${id}/requests`, {
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `https://paulo-backend.onrender.com/partners/${id}/requests`,
+      { cache: "no-store" }
+    );
     const data = await res.json();
     setRequests(data);
+  };
+
+  const archiveRequest = async (requestId: number) => {
+    await fetch(`https://paulo-backend.onrender.com/requests/${requestId}/archive`, {
+      method: "POST",
+    });
+
+    fetchPartnerRequests();
   };
 
   useEffect(() => {
@@ -131,15 +144,24 @@ export default function PartnerDetailPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Link href="/partners" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl shadow-sm transition">
+              <Link
+                href="/partners"
+                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
+              >
                 Retour partenaires
               </Link>
 
-              <Link href="/" className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition">
+              <Link
+                href="/"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
+              >
                 Retour demandes
               </Link>
 
-              <Link href={`/partner?partner_id=${partner.id}`} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl shadow-sm transition">
+              <Link
+                href={`/partner?partner_id=${partner.id}`}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
+              >
                 Vue partenaire
               </Link>
             </div>
@@ -147,7 +169,9 @@ export default function PartnerDetailPage() {
 
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-5">
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              <span className="text-lg font-semibold text-gray-900">{partner.name}</span>
+              <span className="text-lg font-semibold text-gray-900">
+                {partner.name}
+              </span>
 
               <span
                 className={`text-xs font-medium px-2 py-1 rounded-full ${
@@ -178,28 +202,38 @@ export default function PartnerDetailPage() {
               )}
             </div>
 
-            <p className="text-sm text-gray-500">Identifiant partenaire : #{partner.id}</p>
+            <p className="text-sm text-gray-500">
+              Identifiant partenaire : #{partner.id}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <button
               onClick={() => setStatusFilter("all")}
               className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
-                statusFilter === "all" ? "border-blue-500 ring-2 ring-blue-100" : "border-gray-200"
+                statusFilter === "all"
+                  ? "border-blue-500 ring-2 ring-blue-100"
+                  : "border-gray-200"
               }`}
             >
-              <p className="text-sm text-gray-500">Toutes les demandes</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{requests.length}</p>
+              <p className="text-sm text-gray-500">Toutes</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {requests.length}
+              </p>
             </button>
 
             <button
               onClick={() => setStatusFilter(statusFilter === "new" ? "all" : "new")}
               className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
-                statusFilter === "new" ? "border-blue-500 ring-2 ring-blue-100" : "border-gray-200"
+                statusFilter === "new"
+                  ? "border-blue-500 ring-2 ring-blue-100"
+                  : "border-gray-200"
               }`}
             >
-              <p className="text-sm text-gray-500">Nouvelles demandes</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{newCount}</p>
+              <p className="text-sm text-gray-500">Nouvelles</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {newCount}
+              </p>
             </button>
 
             <button
@@ -227,7 +261,9 @@ export default function PartnerDetailPage() {
               }`}
             >
               <p className="text-sm text-gray-500">Traitées</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">{doneCount}</p>
+              <p className="text-2xl font-bold text-green-600 mt-1">
+                {doneCount}
+              </p>
             </button>
           </div>
         </div>
@@ -239,7 +275,7 @@ export default function PartnerDetailPage() {
               <React.Fragment key={dayLabel}>
                 <div className="sticky top-0 z-10 bg-[#f6f8fb] py-2">
                   <div className="flex items-center gap-3">
-                    <div className={`h-px flex-1 ${dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"}`} />
+                    <div className="h-px flex-1 bg-gray-300" />
                     <span
                       className={`text-sm font-semibold px-4 py-1.5 rounded-full border ${
                         dayLabel === "Aujourd’hui"
@@ -249,7 +285,7 @@ export default function PartnerDetailPage() {
                     >
                       {dayLabel}
                     </span>
-                    <div className={`h-px flex-1 ${dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"}`} />
+                    <div className="h-px flex-1 bg-gray-300" />
                   </div>
                 </div>
 
@@ -305,7 +341,7 @@ export default function PartnerDetailPage() {
                             </p>
                           </div>
 
-                          <div className="w-full lg:w-[240px] shrink-0">
+                          <div className="w-full lg:w-[260px] shrink-0">
                             <div className="bg-gray-50 border border-gray-200 rounded-2xl p-3">
                               <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">
                                 Statut
@@ -313,9 +349,18 @@ export default function PartnerDetailPage() {
 
                               <div className="flex flex-wrap gap-2 items-center">
                                 {req.status === "done" ? (
-                                  <span className="text-green-700 bg-green-100 px-3 py-1 rounded-full text-sm font-medium">
-                                    Traité
-                                  </span>
+                                  <>
+                                    <span className="text-green-700 bg-green-100 px-3 py-1 rounded-full text-sm font-medium">
+                                      Traité
+                                    </span>
+
+                                    <button
+                                      onClick={() => archiveRequest(req.id)}
+                                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-xl text-sm transition"
+                                    >
+                                      Archiver
+                                    </button>
+                                  </>
                                 ) : req.status === "in_progress" ? (
                                   <span className="text-orange-700 bg-orange-100 px-3 py-1 rounded-full text-sm font-medium">
                                     En cours

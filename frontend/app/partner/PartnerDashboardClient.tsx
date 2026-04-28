@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 
 type Partner = {
   id: number;
@@ -125,6 +124,14 @@ export default function PartnerDashboardClient() {
     fetchPartnerRequests();
   };
 
+  const archiveRequest = async (id: number) => {
+    await fetch(`https://paulo-backend.onrender.com/requests/${id}/archive`, {
+      method: "POST",
+    });
+
+    fetchPartnerRequests();
+  };
+
   useEffect(() => {
     if (!partnerId || !token) return;
 
@@ -208,17 +215,15 @@ export default function PartnerDashboardClient() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  partner.is_active
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
-                }`}
-              >
-                {partner.is_active ? "Actif" : "Inactif"}
-              </span>
-            </div>
+            <span
+              className={`px-3 py-1 rounded-full text-sm font-medium w-fit ${
+                partner.is_active
+                  ? "bg-green-100 text-green-700"
+                  : "bg-red-100 text-red-700"
+              }`}
+            >
+              {partner.is_active ? "Actif" : "Inactif"}
+            </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -231,9 +236,7 @@ export default function PartnerDashboardClient() {
               }`}
             >
               <p className="text-sm text-gray-500">Toutes</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {requests.length}
-              </p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{requests.length}</p>
             </button>
 
             <button
@@ -245,16 +248,12 @@ export default function PartnerDashboardClient() {
               }`}
             >
               <p className="text-sm text-gray-500">Nouvelles</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {newCount}
-              </p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{newCount}</p>
             </button>
 
             <button
               onClick={() =>
-                setStatusFilter(
-                  statusFilter === "in_progress" ? "all" : "in_progress"
-                )
+                setStatusFilter(statusFilter === "in_progress" ? "all" : "in_progress")
               }
               className={`bg-white border rounded-2xl p-4 shadow-sm text-left transition ${
                 statusFilter === "in_progress"
@@ -277,9 +276,7 @@ export default function PartnerDashboardClient() {
               }`}
             >
               <p className="text-sm text-gray-500">Traitées</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">
-                {doneCount}
-              </p>
+              <p className="text-2xl font-bold text-green-600 mt-1">{doneCount}</p>
             </button>
           </div>
         </div>
@@ -291,11 +288,7 @@ export default function PartnerDashboardClient() {
               <React.Fragment key={dayLabel}>
                 <div className="sticky top-0 z-10 bg-[#f6f8fb] py-2">
                   <div className="flex items-center gap-3">
-                    <div
-                      className={`h-px flex-1 ${
-                        dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"
-                      }`}
-                    />
+                    <div className="h-px flex-1 bg-gray-300" />
                     <span
                       className={`text-sm font-semibold px-4 py-1.5 rounded-full border ${
                         dayLabel === "Aujourd’hui"
@@ -305,11 +298,7 @@ export default function PartnerDashboardClient() {
                     >
                       {dayLabel}
                     </span>
-                    <div
-                      className={`h-px flex-1 ${
-                        dayLabel === "Aujourd’hui" ? "bg-blue-400" : "bg-gray-300"
-                      }`}
-                    />
+                    <div className="h-px flex-1 bg-gray-300" />
                   </div>
                 </div>
 
@@ -373,9 +362,18 @@ export default function PartnerDashboardClient() {
 
                               <div className="flex flex-wrap gap-2 items-center">
                                 {req.status === "done" ? (
-                                  <span className="text-green-700 bg-green-100 px-3 py-1 rounded-full text-sm font-medium">
-                                    Traité
-                                  </span>
+                                  <>
+                                    <span className="text-green-700 bg-green-100 px-3 py-1 rounded-full text-sm font-medium">
+                                      Traité
+                                    </span>
+
+                                    <button
+                                      onClick={() => archiveRequest(req.id)}
+                                      className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-xl text-sm transition"
+                                    >
+                                      Archiver
+                                    </button>
+                                  </>
                                 ) : req.status === "in_progress" ? (
                                   <>
                                     <span className="text-orange-700 bg-orange-100 px-3 py-1 rounded-full text-sm font-medium">
