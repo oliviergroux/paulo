@@ -1,39 +1,28 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Body
 from fastapi.responses import Response
-import os
-from openai import OpenAI
-import requests
 from fastapi.middleware.cors import CORSMiddleware
 from psycopg2.extras import RealDictCursor
-
-import psycopg2
-from psycopg2.extras import RealDictCursor
-
-from fastapi import Body
-
+from openai import OpenAI
 from twilio.rest import Client as TwilioClient
+import psycopg2
+import requests
+import os
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 twilio_client = TwilioClient(
     os.getenv("TWILIO_ACCOUNT_SID"),
     os.getenv("TWILIO_AUTH_TOKEN")
 )
+
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
+APP_URL = os.getenv("APP_URL", "https://paulo-app.vercel.app")
+
 
 def get_db_connection():
     return psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
 
-with get_db_connection() as conn:
-    with conn.cursor() as cur:
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS requests (
-            id SERIAL PRIMARY KEY,
-            phone TEXT,
-            transcription TEXT,
-            category TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = FastAPI()
 
@@ -44,6 +33,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 def root():
@@ -60,7 +50,7 @@ async def twilio_voice(request: Request):
     twiml = """
     <Response>
         <Say language="fr-FR" voice="alice">
-            Bonjour, vous êtes sur Paulo. Expliquez votre demande après le bip..
+            Bonjour, vous êtes sur Paulo. Expliquez votre demande après le bip.
         </Say>
         <Record 
             maxLength="120" 
@@ -103,9 +93,9 @@ async def recording(request: Request):
         input=f"""
 Classe cette demande dans UNE seule catégorie parmi :
 - transport : déplacement, taxi, trajet
-- commerce : achat d’un produit (fleurs, pain, viande, courses, etc.) ou rdv coiffeur
-- service_local : prestation d’un professionnel (plombier, électricien, jardinier, travaux, réparation)
-- mairie : demande administrative, information ou problème dans la commune (problème de voierie, lumière, etc)
+- commerce : achat d’un produit ou rdv coiffeur
+- service_local : prestation d’un professionnel
+- mairie : demande administrative, information ou problème dans la commune
 - autre
 
 Demande : {transcript.text}
@@ -115,8 +105,8 @@ Réponds uniquement par le nom exact de la catégorie.
     )
 
     subtype = client.responses.create(
-    model="gpt-4o-mini",
-    input=f"""
+        model="gpt-4o-mini",
+        input=f"""
 Tu dois extraire un sous-type précis à partir de la demande.
 
 Si category = commerce, réponds par un seul mot parmi :
@@ -146,12 +136,16 @@ Réponds uniquement par le sous-type exact.
 """
     )
 
+    print("🏷️ Catégorie :", category.output_text)
     print("🔎 Sous-type :", subtype.output_text)
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO requests (phone, transcription, category, subtype) VALUES (%s, %s, %s, %s)",
+                """
+                INSERT INTO requests (phone, transcription, category, subtype)
+                VALUES (%s, %s, %s, %s)
+                """,
                 (caller, transcript.text, category.output_text, subtype.output_text)
             )
 
@@ -162,7 +156,8 @@ Réponds uniquement par le sous-type exact.
         </Response>
         """,
         media_type="application/xml"
-        )
+    )
+
 
 @app.get("/requests")
 def get_requests():
@@ -170,24 +165,26 @@ def get_requests():
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT 
-    r.id,
-    r.phone,
-    r.transcription,
-    r.category,
-    r.subtype,
-    r.status,
-    r.assigned_partner_id,
-    p.name AS partner_name,
-    r.created_at,
-    r.handled_at,
-    r.archived
-FROM requests r
-LEFT JOIN partners p ON r.assigned_partner_id = p.id
-WHERE r.archived = false
-ORDER BY r.created_at ASC
+                    r.id,
+                    r.phone,
+                    r.transcription,
+                    r.category,
+                    r.subtype,
+                    r.status,
+                    r.assigned_partner_id,
+                    p.name AS partner_name,
+                    r.created_at,
+                    r.handled_at,
+                    r.archived
+                FROM requests r
+                LEFT JOIN partners p ON r.assigned_partner_id = p.id
+                WHERE r.archived = false
+                ORDER BY r.created_at ASC
             """)
             rows = cur.fetchall()
+
     return rows
+
 
 @app.post("/requests/{request_id}/status")
 def update_status(request_id: int, status: str = Body(...)):
@@ -200,16 +197,25 @@ def update_status(request_id: int, status: str = Body(...)):
         with conn.cursor() as cur:
             if status == "done":
                 cur.execute(
-                    "UPDATE requests SET status = %s, handled_at = NOW() WHERE id = %s",
+                    """
+                    UPDATE requests
+                    SET status = %s, handled_at = NOW()
+                    WHERE id = %s
+                    """,
                     (status, request_id)
                 )
             else:
                 cur.execute(
-                    "UPDATE requests SET status = %s WHERE id = %s",
+                    """
+                    UPDATE requests
+                    SET status = %s
+                    WHERE id = %s
+                    """,
                     (status, request_id)
                 )
 
     return {"ok": True}
+
 
 @app.post("/requests/{request_id}/archive")
 def archive_request(request_id: int):
@@ -219,7 +225,9 @@ def archive_request(request_id: int):
                 "UPDATE requests SET archived = true WHERE id = %s",
                 (request_id,)
             )
+
     return {"ok": True}
+
 
 @app.get("/partners")
 def get_partners():
@@ -234,12 +242,16 @@ def get_partners():
                     p.is_active,
                     COUNT(r.id) AS assigned_requests_count
                 FROM partners p
-                LEFT JOIN requests r ON r.assigned_partner_id = p.id AND r.archived = false
+                LEFT JOIN requests r
+                    ON r.assigned_partner_id = p.id
+                    AND r.archived = false
                 GROUP BY p.id, p.name, p.category, p.subtype, p.is_active
                 ORDER BY p.name ASC
             """)
             rows = cur.fetchall()
+
     return rows
+
 
 @app.post("/requests/{request_id}/assign")
 def assign_request(request_id: int, payload: dict = Body(...)):
@@ -247,24 +259,23 @@ def assign_request(request_id: int, payload: dict = Body(...)):
 
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-
-            # 1. récupérer infos partenaire
             cur.execute("""
-                SELECT id, name, phone
+                SELECT id, name, phone, access_token
                 FROM partners
                 WHERE id = %s
             """, (partner_id,))
             partner = cur.fetchone()
 
-            # 2. récupérer la demande
             cur.execute("""
-                SELECT id, transcription, category, subtype
+                SELECT id, phone, transcription, category, subtype
                 FROM requests
                 WHERE id = %s
             """, (request_id,))
             req = cur.fetchone()
 
-            # 3. assignation
+            if not partner or not req:
+                return {"error": "not_found"}
+
             cur.execute("""
                 UPDATE requests
                 SET assigned_to = %s,
@@ -272,12 +283,24 @@ def assign_request(request_id: int, payload: dict = Body(...)):
                 WHERE id = %s
             """, ("partner", partner_id, request_id))
 
-    # 4. envoyer SMS (hors connexion DB)
-    if partner and partner["phone"]:
-        message = f"""
-Nouvelle demande Paulo 📩
-        """
+    partner_url = (
+        f"{APP_URL}/partner?"
+        f"partner_id={partner['id']}&token={partner['access_token']}"
+    )
 
+    message = f"""Nouvelle demande Paulo 📩
+
+{req['transcription']}
+
+Catégorie : {req['category']} / {req['subtype']}
+Contact client : {req['phone']}
+
+Voir la demande :
+{partner_url}
+"""
+
+    if partner["phone"]:
+        # SMS classique
         try:
             twilio_client.messages.create(
                 body=message,
@@ -288,7 +311,20 @@ Nouvelle demande Paulo 📩
         except Exception as e:
             print("❌ Erreur SMS :", e)
 
+        # WhatsApp en plus
+        if TWILIO_WHATSAPP_NUMBER:
+            try:
+                twilio_client.messages.create(
+                    body=message,
+                    from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
+                    to="whatsapp:" + partner["phone"]
+                )
+                print("💬 WhatsApp envoyé à", partner["name"])
+            except Exception as e:
+                print("❌ Erreur WhatsApp :", e)
+
     return {"ok": True}
+
 
 @app.get("/partners/{partner_id}")
 def get_partner(partner_id: int, token: str = ""):
@@ -309,19 +345,21 @@ def get_partner(partner_id: int, token: str = ""):
 
     return partner
 
+
 @app.get("/partners/{partner_id}/requests")
 def get_partner_requests(partner_id: int, token: str = ""):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
-                SELECT id, access_token
-                FROM partners
-                WHERE id = %s
-            """, (partner_id,))
-            partner = cur.fetchone()
+            if token:
+                cur.execute("""
+                    SELECT id, access_token
+                    FROM partners
+                    WHERE id = %s
+                """, (partner_id,))
+                partner = cur.fetchone()
 
-            if not partner or partner["access_token"] != token:
-                return {"error": "unauthorized"}
+                if not partner or partner["access_token"] != token:
+                    return {"error": "unauthorized"}
 
             cur.execute("""
                 SELECT id, phone, transcription, category, subtype, status,
