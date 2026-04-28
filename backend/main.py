@@ -372,3 +372,91 @@ def get_partner_requests(partner_id: int, token: str = ""):
             rows = cur.fetchall()
 
     return rows
+
+@app.post("/twilio/whatsapp")
+async def whatsapp_inbound(request: Request):
+    form = await request.form()
+
+    message_body = form.get("Body")
+    sender = form.get("From")  # ex: whatsapp:+33612345678
+    phone = sender.replace("whatsapp:", "") if sender else sender
+
+    print("💬 WhatsApp de :", phone)
+    print("📝 Message :", message_body)
+
+    if not message_body:
+        return Response(
+            content="""
+            <Response>
+                <Message>Je n'ai pas reçu votre message. Pouvez-vous réessayer ?</Message>
+            </Response>
+            """,
+            media_type="application/xml"
+        )
+
+    category = client.responses.create(
+        model="gpt-4o-mini",
+        input=f"""
+Classe cette demande dans UNE seule catégorie parmi :
+- transport : déplacement, taxi, trajet
+- commerce : achat d’un produit ou rdv coiffeur
+- service_local : prestation d’un professionnel
+- mairie : demande administrative, information ou problème dans la commune
+- autre
+
+Demande : {message_body}
+
+Réponds uniquement par le nom exact de la catégorie.
+"""
+    )
+
+    subtype = client.responses.create(
+        model="gpt-4o-mini",
+        input=f"""
+Tu dois extraire un sous-type précis à partir de la demande.
+
+Si category = commerce, réponds par un seul mot parmi :
+- fleuriste
+- boucher
+- tabac_presse
+- poste
+- courses
+- autre
+
+Si category = service_local, réponds par un seul mot parmi :
+- plombier
+- jardinier
+- maçon
+- pisciniste
+- petits_travaux
+- autre
+
+Si category = transport, réponds : taxi
+Si category = mairie, réponds : mairie
+Sinon réponds : autre
+
+Category : {category.output_text}
+Demande : {message_body}
+
+Réponds uniquement par le sous-type exact.
+"""
+    )
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO requests (phone, transcription, category, subtype)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (phone, message_body, category.output_text, subtype.output_text)
+            )
+
+    return Response(
+        content="""
+        <Response>
+            <Message>Merci, votre demande a bien été enregistrée.</Message>
+        </Response>
+        """,
+        media_type="application/xml"
+    )
