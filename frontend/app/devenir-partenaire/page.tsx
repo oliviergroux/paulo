@@ -25,19 +25,51 @@ export default function BecomePartnerPage() {
     setLoading(true);
     setError("");
 
+    if (
+      !form.name.trim() ||
+      !form.siret.trim() ||
+      !form.phone.trim() ||
+      !form.category.trim() ||
+      !form.subtype.trim() ||
+      !form.address.trim()
+    ) {
+      setError("Merci de remplir tous les champs.");
+      setLoading(false);
+      return;
+    }
+
+    if (form.siret.trim().length < 9) {
+      setError("Merci d’indiquer un SIRET valide.");
+      setLoading(false);
+      return;
+    }
+
+    if (form.phone.trim().length < 8) {
+      setError("Merci d’indiquer un numéro de téléphone valide.");
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("https://paulo-backend.onrender.com/partners/apply", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          name: form.name.trim(),
+          siret: form.siret.trim(),
+          phone: form.phone.trim(),
+          category: form.category.trim(),
+          subtype: form.subtype.trim(),
+          address: form.address.trim(),
+        }),
       });
 
       const data = await res.json();
 
-      if (!data.ok) {
-        setError("Une erreur est survenue.");
+      if (!res.ok || !data.ok) {
+        setError("Une erreur est survenue. Merci de vérifier les informations.");
         return;
       }
 
@@ -86,7 +118,9 @@ export default function BecomePartnerPage() {
 
         <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-6 space-y-5">
           <div>
-            <label className="block text-sm font-medium mb-2">Nom de l’entreprise</label>
+            <label className="block text-sm font-medium mb-2">
+              Nom de l’entreprise
+            </label>
             <input
               value={form.name}
               onChange={(e) => updateField("name", e.target.value)}

@@ -1,14 +1,13 @@
 from fastapi import FastAPI, Request, Body
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from psycopg2.extras import RealDictCursor
 from openai import OpenAI
 from twilio.rest import Client as TwilioClient
 import psycopg2
 import requests
 import os
-
-from pydantic import BaseModel
 import secrets
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -20,15 +19,17 @@ twilio_client = TwilioClient(
 
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
-APP_URL = os.getenv("APP_URL", "https://paulo-app.vercel.app")
+APP_URL = os.getenv("APP_URL", "https://paulo-teal-nine.vercel.app")
+
 
 class PartnerCreate(BaseModel):
-    name: str
-    siret: str
-    phone: str
-    category: str
-    subtype: str
-    address: str
+    name: str = Field(..., min_length=2)
+    siret: str = Field(..., min_length=9)
+    phone: str = Field(..., min_length=8)
+    category: str = Field(..., min_length=2)
+    subtype: str = Field(..., min_length=2)
+    address: str = Field(..., min_length=5)
+
 
 def get_db_connection():
     return psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
@@ -96,8 +97,6 @@ async def recording(request: Request):
             file=f
         )
 
-    print("🧠 Transcription :", transcript.text)
-
     category = client.responses.create(
         model="gpt-4o-mini",
         input=f"""
@@ -146,9 +145,6 @@ Réponds uniquement par le sous-type exact.
 """
     )
 
-    print("🏷️ Catégorie :", category.output_text)
-    print("🔎 Sous-type :", subtype.output_text)
-
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -163,6 +159,92 @@ Réponds uniquement par le sous-type exact.
         content="""
         <Response>
             <Say>Merci, votre demande a bien été enregistrée.</Say>
+        </Response>
+        """,
+        media_type="application/xml"
+    )
+
+
+@app.post("/twilio/whatsapp")
+async def whatsapp_inbound(request: Request):
+    form = await request.form()
+
+    message_body = form.get("Body")
+    sender = form.get("From")
+    phone = sender.replace("whatsapp:", "") if sender else sender
+
+    if not message_body:
+        return Response(
+            content="""
+            <Response>
+                <Message>Je n'ai pas reçu votre message. Pouvez-vous réessayer ?</Message>
+            </Response>
+            """,
+            media_type="application/xml"
+        )
+
+    category = client.responses.create(
+        model="gpt-4o-mini",
+        input=f"""
+Classe cette demande dans UNE seule catégorie parmi :
+- transport : déplacement, taxi, trajet
+- commerce : achat d’un produit ou rdv coiffeur
+- service_local : prestation d’un professionnel
+- mairie : demande administrative, information ou problème dans la commune
+- autre
+
+Demande : {message_body}
+
+Réponds uniquement par le nom exact de la catégorie.
+"""
+    )
+
+    subtype = client.responses.create(
+        model="gpt-4o-mini",
+        input=f"""
+Tu dois extraire un sous-type précis à partir de la demande.
+
+Si category = commerce, réponds par un seul mot parmi :
+- fleuriste
+- boucher
+- tabac_presse
+- poste
+- courses
+- autre
+
+Si category = service_local, réponds par un seul mot parmi :
+- plombier
+- jardinier
+- maçon
+- pisciniste
+- petits_travaux
+- autre
+
+Si category = transport, réponds : taxi
+Si category = mairie, réponds : mairie
+Sinon réponds : autre
+
+Category : {category.output_text}
+Demande : {message_body}
+
+Réponds uniquement par le sous-type exact.
+"""
+    )
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO requests (phone, transcription, category, subtype)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (phone, message_body, category.output_text, subtype.output_text)
+            )
+
+    return Response(
+        content="""
+        <Response>
+            <Message>Merci, votre demande a bien été enregistrée.</Message>
         </Response>
         """,
         media_type="application/xml"
@@ -250,17 +332,62 @@ def get_partners():
                     p.category,
                     p.subtype,
                     p.is_active,
+                    p.siret,
+                    p.phone,
+                    p.address,
                     COUNT(r.id) AS assigned_requests_count
                 FROM partners p
                 LEFT JOIN requests r
                     ON r.assigned_partner_id = p.id
                     AND r.archived = false
-                GROUP BY p.id, p.name, p.category, p.subtype, p.is_active
+                GROUP BY p.id, p.name, p.category, p.subtype, p.is_active, p.siret, p.phone, p.address
                 ORDER BY p.name ASC
             """)
             rows = cur.fetchall()
 
     return rows
+
+
+@app.post("/partners/apply")
+def create_partner_application(partner: PartnerCreate):
+    allowed_categories = ["commerce", "service_local", "transport", "mairie"]
+
+    if partner.category not in allowed_categories:
+        return {"ok": False, "error": "invalid_category"}
+
+    access_token = secrets.token_urlsafe(32)
+
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                INSERT INTO partners (
+                    name,
+                    siret,
+                    phone,
+                    category,
+                    subtype,
+                    address,
+                    is_active,
+                    access_token
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, false, %s)
+                RETURNING id, name
+            """, (
+                partner.name.strip(),
+                partner.siret.strip(),
+                partner.phone.strip(),
+                partner.category.strip(),
+                partner.subtype.strip(),
+                partner.address.strip(),
+                access_token
+            ))
+
+            new_partner = cur.fetchone()
+
+    return {
+        "ok": True,
+        "partner": new_partner
+    }
 
 
 @app.post("/requests/{request_id}/assign")
@@ -310,7 +437,6 @@ Voir la demande :
 """
 
     if partner["phone"]:
-        # SMS classique
         try:
             twilio_client.messages.create(
                 body=message,
@@ -321,7 +447,6 @@ Voir la demande :
         except Exception as e:
             print("❌ Erreur SMS :", e)
 
-        # WhatsApp en plus
         if TWILIO_WHATSAPP_NUMBER:
             try:
                 twilio_client.messages.create(
@@ -341,7 +466,8 @@ def get_partner(partner_id: int, token: str = ""):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, name, category, subtype, is_active, created_at, access_token
+                SELECT id, name, category, subtype, is_active, created_at,
+                       access_token, siret, phone, address
                 FROM partners
                 WHERE id = %s
             """, (partner_id,))
@@ -382,127 +508,3 @@ def get_partner_requests(partner_id: int, token: str = ""):
             rows = cur.fetchall()
 
     return rows
-
-@app.post("/twilio/whatsapp")
-async def whatsapp_inbound(request: Request):
-    form = await request.form()
-
-    message_body = form.get("Body")
-    sender = form.get("From")  # ex: whatsapp:+33612345678
-    phone = sender.replace("whatsapp:", "") if sender else sender
-
-    print("💬 WhatsApp de :", phone)
-    print("📝 Message :", message_body)
-
-    if not message_body:
-        return Response(
-            content="""
-            <Response>
-                <Message>Je n'ai pas reçu votre message. Pouvez-vous réessayer ?</Message>
-            </Response>
-            """,
-            media_type="application/xml"
-        )
-
-    category = client.responses.create(
-        model="gpt-4o-mini",
-        input=f"""
-Classe cette demande dans UNE seule catégorie parmi :
-- transport : déplacement, taxi, trajet
-- commerce : achat d’un produit ou rdv coiffeur
-- service_local : prestation d’un professionnel
-- mairie : demande administrative, information ou problème dans la commune
-- autre
-
-Demande : {message_body}
-
-Réponds uniquement par le nom exact de la catégorie.
-"""
-    )
-
-    subtype = client.responses.create(
-        model="gpt-4o-mini",
-        input=f"""
-Tu dois extraire un sous-type précis à partir de la demande.
-
-Si category = commerce, réponds par un seul mot parmi :
-- fleuriste
-- boucher
-- tabac_presse
-- poste
-- courses
-- autre
-
-Si category = service_local, réponds par un seul mot parmi :
-- plombier
-- jardinier
-- maçon
-- pisciniste
-- petits_travaux
-- autre
-
-Si category = transport, réponds : taxi
-Si category = mairie, réponds : mairie
-Sinon réponds : autre
-
-Category : {category.output_text}
-Demande : {message_body}
-
-Réponds uniquement par le sous-type exact.
-"""
-    )
-
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO requests (phone, transcription, category, subtype)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (phone, message_body, category.output_text, subtype.output_text)
-            )
-
-    return Response(
-        content="""
-        <Response>
-            <Message>Merci, votre demande a bien été enregistrée.</Message>
-        </Response>
-        """,
-        media_type="application/xml"
-    )
-
-@app.post("/partners/apply")
-def create_partner_application(partner: PartnerCreate):
-    access_token = secrets.token_urlsafe(32)
-
-    with get_db_connection() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
-                INSERT INTO partners (
-                    name,
-                    siret,
-                    phone,
-                    category,
-                    subtype,
-                    address,
-                    is_active,
-                    access_token
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, false, %s)
-                RETURNING id, name
-            """, (
-                partner.name,
-                partner.siret,
-                partner.phone,
-                partner.category,
-                partner.subtype,
-                partner.address,
-                access_token
-            ))
-
-            new_partner = cur.fetchone()
-
-    return {
-        "ok": True,
-        "partner": new_partner
-    }
