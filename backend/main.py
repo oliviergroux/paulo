@@ -291,22 +291,38 @@ Nouvelle demande Paulo 📩
     return {"ok": True}
 
 @app.get("/partners/{partner_id}")
-def get_partner(partner_id: int):
+def get_partner(partner_id: int, token: str = ""):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, name, category, subtype, is_active, created_at
+                SELECT id, name, category, subtype, is_active, created_at, access_token
                 FROM partners
                 WHERE id = %s
             """, (partner_id,))
             partner = cur.fetchone()
 
+            if not partner:
+                return {"error": "not_found"}
+
+            if token and partner["access_token"] != token:
+                return {"error": "unauthorized"}
+
     return partner
 
 @app.get("/partners/{partner_id}/requests")
-def get_partner_requests(partner_id: int):
+def get_partner_requests(partner_id: int, token: str = ""):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, access_token
+                FROM partners
+                WHERE id = %s
+            """, (partner_id,))
+            partner = cur.fetchone()
+
+            if not partner or partner["access_token"] != token:
+                return {"error": "unauthorized"}
+
             cur.execute("""
                 SELECT id, phone, transcription, category, subtype, status,
                        created_at, handled_at

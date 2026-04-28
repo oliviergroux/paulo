@@ -27,10 +27,12 @@ type RequestItem = {
 export default function PartnerDashboardClient() {
   const searchParams = useSearchParams();
   const partnerId = searchParams.get("partner_id");
+  const token = searchParams.get("token");
 
   const [partner, setPartner] = useState<Partner | null>(null);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [accessError, setAccessError] = useState("");
 
   const isUrgent = (req: RequestItem) =>
     req.category === "service_local" || req.category === "mairie";
@@ -67,24 +69,39 @@ export default function PartnerDashboardClient() {
   };
 
   const fetchPartner = async () => {
-    if (!partnerId) return;
+    if (!partnerId || !token) return;
 
     const res = await fetch(
-      `https://paulo-backend.onrender.com/partners/${partnerId}`,
+      `https://paulo-backend.onrender.com/partners/${partnerId}?token=${token}`,
       { cache: "no-store" }
     );
+
     const data = await res.json();
+
+    if (data.error) {
+      setAccessError("Accès refusé.");
+      return;
+    }
+
     setPartner(data);
   };
 
   const fetchPartnerRequests = async () => {
-    if (!partnerId) return;
+    if (!partnerId || !token) return;
 
     const res = await fetch(
-      `https://paulo-backend.onrender.com/partners/${partnerId}/requests`,
+      `https://paulo-backend.onrender.com/partners/${partnerId}/requests?token=${token}`,
       { cache: "no-store" }
     );
+
     const data = await res.json();
+
+    if (data.error) {
+      setAccessError("Accès refusé.");
+      setRequests([]);
+      return;
+    }
+
     setRequests(data);
   };
 
@@ -109,6 +126,8 @@ export default function PartnerDashboardClient() {
   };
 
   useEffect(() => {
+    if (!partnerId || !token) return;
+
     fetchPartner();
     fetchPartnerRequests();
 
@@ -117,12 +136,28 @@ export default function PartnerDashboardClient() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [partnerId]);
+  }, [partnerId, token]);
 
   if (!partnerId) {
     return (
       <main className="min-h-screen bg-[#f6f8fb] text-black p-8">
         <p>Partner ID manquant</p>
+      </main>
+    );
+  }
+
+  if (!token) {
+    return (
+      <main className="min-h-screen bg-[#f6f8fb] text-black p-8">
+        <p>Accès refusé : token manquant</p>
+      </main>
+    );
+  }
+
+  if (accessError) {
+    return (
+      <main className="min-h-screen bg-[#f6f8fb] text-black p-8">
+        <p>{accessError}</p>
       </main>
     );
   }
@@ -183,13 +218,6 @@ export default function PartnerDashboardClient() {
               >
                 {partner.is_active ? "Actif" : "Inactif"}
               </span>
-
-              <Link
-                href="/partners"
-                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl shadow-sm transition"
-              >
-                Retour partenaires
-              </Link>
             </div>
           </div>
 
