@@ -30,6 +30,12 @@ export default function Home() {
   const [highlightedIds, setHighlightedIds] = useState<number[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [selectedPartners, setSelectedPartners] = useState<Record<number, string>>({});
+  const [quickFilters, setQuickFilters] = useState({
+    today: false,
+    urgent: false,
+    inProgress: false,
+    done: false,
+  });
 
   const seenIdsRef = useRef<Set<number>>(new Set());
   const isFirstLoadRef = useRef(true);
@@ -65,6 +71,24 @@ export default function Home() {
     });
   };
 
+  const toggleQuickFilter = (key: keyof typeof quickFilters) => {
+    setQuickFilters((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const resetFilters = () => {
+    setStatusFilter("all");
+    setCategoryFilter("all");
+    setQuickFilters({
+      today: false,
+      urgent: false,
+      inProgress: false,
+      done: false,
+    });
+  };
+
   const todayCount = requests.filter(
     (req) => formatDayLabel(req.created_at) === "Aujourd’hui"
   ).length;
@@ -76,6 +100,12 @@ export default function Home() {
   const filteredRequests = requests
     .filter((req) => (statusFilter === "all" ? true : req.status === statusFilter))
     .filter((req) => (categoryFilter === "all" ? true : req.category === categoryFilter))
+    .filter((req) =>
+      quickFilters.today ? formatDayLabel(req.created_at) === "Aujourd’hui" : true
+    )
+    .filter((req) => (quickFilters.urgent ? isUrgent(req) : true))
+    .filter((req) => (quickFilters.inProgress ? req.status === "in_progress" : true))
+    .filter((req) => (quickFilters.done ? req.status === "done" : true))
     .sort(
       (a, b) =>
         new Date(a.created_at + "Z").getTime() -
@@ -286,27 +316,55 @@ export default function Home() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
-                <div className="rounded-3xl bg-white border border-slate-200 p-5 shadow-sm">
+                <button
+                  onClick={() => toggleQuickFilter("today")}
+                  className={`rounded-3xl border p-5 shadow-sm text-left transition ${
+                    quickFilters.today
+                      ? "bg-blue-50 border-blue-500 ring-2 ring-blue-100"
+                      : "bg-white border-slate-200 hover:border-blue-200"
+                  }`}
+                >
                   <p className="text-sm text-slate-500">Demandes du jour</p>
                   <p className="text-3xl font-bold mt-2">{todayCount}</p>
-                </div>
+                </button>
 
-                <div className="rounded-3xl bg-white border border-slate-200 p-5 shadow-sm">
+                <button
+                  onClick={() => toggleQuickFilter("urgent")}
+                  className={`rounded-3xl border p-5 shadow-sm text-left transition ${
+                    quickFilters.urgent
+                      ? "bg-red-50 border-red-500 ring-2 ring-red-100"
+                      : "bg-white border-slate-200 hover:border-red-200"
+                  }`}
+                >
                   <p className="text-sm text-slate-500">Urgentes</p>
                   <p className="text-3xl font-bold mt-2 text-red-600">{urgentCount}</p>
-                </div>
+                </button>
 
-                <div className="rounded-3xl bg-white border border-slate-200 p-5 shadow-sm">
+                <button
+                  onClick={() => toggleQuickFilter("inProgress")}
+                  className={`rounded-3xl border p-5 shadow-sm text-left transition ${
+                    quickFilters.inProgress
+                      ? "bg-orange-50 border-orange-500 ring-2 ring-orange-100"
+                      : "bg-white border-slate-200 hover:border-orange-200"
+                  }`}
+                >
                   <p className="text-sm text-slate-500">En cours</p>
                   <p className="text-3xl font-bold mt-2 text-orange-600">
                     {inProgressCount}
                   </p>
-                </div>
+                </button>
 
-                <div className="rounded-3xl bg-white border border-slate-200 p-5 shadow-sm">
+                <button
+                  onClick={() => toggleQuickFilter("done")}
+                  className={`rounded-3xl border p-5 shadow-sm text-left transition ${
+                    quickFilters.done
+                      ? "bg-emerald-50 border-emerald-500 ring-2 ring-emerald-100"
+                      : "bg-white border-slate-200 hover:border-emerald-200"
+                  }`}
+                >
                   <p className="text-sm text-slate-500">Traitées</p>
                   <p className="text-3xl font-bold mt-2 text-emerald-600">{doneCount}</p>
-                </div>
+                </button>
               </div>
 
               <div className="mt-5 rounded-3xl bg-white border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-center">
@@ -332,6 +390,13 @@ export default function Home() {
                   <option value="service_local">Service local</option>
                   <option value="mairie">Mairie</option>
                 </select>
+
+                <button
+                  onClick={resetFilters}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Réinitialiser
+                </button>
 
                 <div className="md:ml-auto text-sm text-slate-500">
                   {filteredRequests.length} demande
