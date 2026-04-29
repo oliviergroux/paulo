@@ -3,6 +3,19 @@
 import { useState } from "react";
 import Link from "next/link";
 
+const SUBTYPES = {
+  commerce: ["fleuriste", "boucher"],
+  service_local: [
+    "maçon",
+    "pisciniste",
+    "electricien",
+    "plombier",
+    "petits_travaux",
+  ],
+  transport: ["taxi"],
+  mairie: ["mairie"],
+};
+
 export default function BecomePartnerPage() {
   const [form, setForm] = useState({
     name: "",
@@ -18,7 +31,20 @@ export default function BecomePartnerPage() {
   const [error, setError] = useState("");
 
   const updateField = (key: string, value: string) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      if (key === "category") {
+        return {
+          ...prev,
+          category: value,
+          subtype: "",
+        };
+      }
+
+      return {
+        ...prev,
+        [key]: value,
+      };
+    });
   };
 
   const submit = async () => {
@@ -87,7 +113,8 @@ export default function BecomePartnerPage() {
         <div className="bg-white border border-slate-200 rounded-3xl p-8 max-w-lg shadow-sm">
           <h1 className="text-2xl font-bold mb-3">Demande envoyée ✅</h1>
           <p className="text-slate-600">
-            Merci. Votre demande partenaire a bien été reçue. Paulo vous recontactera après validation.
+            Merci. Votre demande partenaire a bien été reçue. Paulo vous
+            recontactera après validation.
           </p>
 
           <Link
@@ -100,6 +127,9 @@ export default function BecomePartnerPage() {
       </main>
     );
   }
+
+  const availableSubtypes =
+    SUBTYPES[form.category as keyof typeof SUBTYPES] || [];
 
   return (
     <main className="min-h-screen bg-[#f6f8fb] text-black">
@@ -145,8 +175,12 @@ export default function BecomePartnerPage() {
               value={form.phone}
               onChange={(e) => updateField("phone", e.target.value)}
               className="w-full border border-slate-200 rounded-2xl px-4 py-3"
-              placeholder="+33612345678"
+              placeholder="+33612345678 ou 0612345678"
             />
+            <p className="text-xs text-slate-400 mt-2">
+              Les numéros mobiles permettent l’envoi de notifications SMS /
+              WhatsApp.
+            </p>
           </div>
 
           <div>
@@ -161,7 +195,9 @@ export default function BecomePartnerPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-2">Catégorie</label>
+              <label className="block text-sm font-medium mb-2">
+                Catégorie
+              </label>
               <select
                 value={form.category}
                 onChange={(e) => updateField("category", e.target.value)}
@@ -175,13 +211,21 @@ export default function BecomePartnerPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Sous-type</label>
-              <input
+              <label className="block text-sm font-medium mb-2">
+                Sous-type
+              </label>
+              <select
                 value={form.subtype}
                 onChange={(e) => updateField("subtype", e.target.value)}
-                className="w-full border border-slate-200 rounded-2xl px-4 py-3"
-                placeholder="Ex : plombier, fleuriste, boucher..."
-              />
+                className="w-full border border-slate-200 rounded-2xl px-4 py-3 bg-white"
+              >
+                <option value="">Choisir un sous-type</option>
+                {availableSubtypes.map((subtype) => (
+                  <option key={subtype} value={subtype}>
+                    {subtype.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
