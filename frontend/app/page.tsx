@@ -12,6 +12,9 @@ type Request = {
   status: string;
   assigned_partner_id?: number | null;
   partner_name?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  address?: string | null;
 };
 
 type Partner = {
@@ -254,12 +257,6 @@ export default function Home() {
             >
               Partenaires
             </a>
-            <a
-              href="/devenir-partenaire"
-              className="rounded-2xl bg-white border border-slate-200 text-slate-700 px-5 py-3 text-sm font-medium shadow-sm hover:bg-slate-50 transition"
-            >
-              Devenir partenaire
-            </a>
           </nav>
 
           <div className="mt-auto p-4">
@@ -486,6 +483,34 @@ export default function Home() {
                               <p className="text-lg leading-7 text-slate-900">
                                 {req.transcription}
                               </p>
+
+                              {(req.first_name || req.last_name || req.address) && (
+                                <div className="mt-4 rounded-2xl bg-slate-50 border border-slate-200 p-4 text-sm">
+                                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+                                    Fiche client
+                                  </p>
+
+                                  {(req.first_name || req.last_name) && (
+                                    <p className="text-slate-700">
+                                      <span className="font-semibold text-slate-950">
+                                        Nom :
+                                      </span>{" "}
+                                      {[req.first_name, req.last_name]
+                                        .filter(Boolean)
+                                        .join(" ")}
+                                    </p>
+                                  )}
+
+                                  {req.address && (
+                                    <p className="text-slate-700 mt-1">
+                                      <span className="font-semibold text-slate-950">
+                                        Adresse :
+                                      </span>{" "}
+                                      {req.address}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                             <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
@@ -563,10 +588,18 @@ export default function Home() {
                                       <option value="">Choisir un partenaire</option>
                                       {partners
                                         .filter((p) => {
-                                          const partnerCategory = p.category?.trim().toLowerCase();
-                                          const partnerSubtype = p.subtype?.trim().toLowerCase();
-                                          const requestCategory = req.category?.trim().toLowerCase();
-                                          const requestSubtype = req.subtype?.trim().toLowerCase();
+                                          const partnerCategory = p.category
+                                            ?.trim()
+                                            .toLowerCase();
+                                          const partnerSubtype = p.subtype
+                                            ?.trim()
+                                            .toLowerCase();
+                                          const requestCategory = req.category
+                                            ?.trim()
+                                            .toLowerCase();
+                                          const requestSubtype = req.subtype
+                                            ?.trim()
+                                            .toLowerCase();
 
                                           return (
                                             p.is_active &&
