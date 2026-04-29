@@ -269,7 +269,9 @@ def root():
 def health():
     return {"status": "ok"}
 
-
+@app.get("/debug/routes")
+def debug_routes():
+    return [route.path for route in app.routes]
 # =========================
 # TWILIO VOICE
 # =========================
