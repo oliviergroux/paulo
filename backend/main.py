@@ -425,7 +425,7 @@ def create_partner_application(partner: PartnerCreate):
                     access_token
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, false, %s)
-                RETURNING id, name
+                RETURNING id, name, access_token, is_active
             """, (
                 partner.name.strip(),
                 partner.siret.strip(),
