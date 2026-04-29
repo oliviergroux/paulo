@@ -5,8 +5,6 @@ import Link from "next/link";
 
 const APP_URL = "https://paulo-teal-nine.vercel.app";
 
-const [copied, setCopied] = useState(false);
-
 const SUBTYPES = {
   commerce: ["fleuriste", "boucher"],
   service_local: [
@@ -61,6 +59,7 @@ export default function BecomePartnerPage() {
   } | null>(null);
 
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
   const selectedProfile =
@@ -88,6 +87,16 @@ export default function BecomePartnerPage() {
         [key]: value,
       };
     });
+  };
+
+  const copyPartnerUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(partnerUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      alert("Impossible de copier automatiquement. Vous pouvez copier le lien manuellement.");
+    }
   };
 
   const submit = async () => {
@@ -136,9 +145,13 @@ export default function BecomePartnerPage() {
       });
 
       const data = await res.json();
+      console.log("Partner apply response:", data);
 
       if (!res.ok || !data.ok) {
-        setError("Une erreur est survenue. Merci de vérifier les informations.");
+        setError(
+          data?.detail?.[0]?.msg ||
+            "Une erreur est survenue. Merci de vérifier les informations."
+        );
         return;
       }
 
@@ -183,42 +196,43 @@ export default function BecomePartnerPage() {
 
           <div className="mt-6 rounded-3xl bg-slate-50 border border-slate-200 p-5">
             <p className="text-sm font-semibold text-slate-700 mb-2">
-                Votre lien partenaire
+              Votre lien partenaire
             </p>
 
             <div className="flex items-center gap-2">
-                <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-3 text-sm text-slate-600 break-all">
+              <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-3 text-sm text-slate-600 break-all">
                 {partnerUrl}
-                </div>
+              </div>
 
-                {/* Copier */}
-                <button
-                onClick={() => navigator.clipboard.writeText(partnerUrl)}
+              <button
+                onClick={copyPartnerUrl}
                 className="p-3 rounded-2xl bg-white border border-slate-200 hover:bg-slate-100 transition"
                 title="Copier le lien"
-                >
+              >
                 📋
-                </button>
+              </button>
 
-                {/* Favoris */}
-                <button
-                onClick={() => alert("Ajoutez cette page à vos favoris avec Ctrl+D ou Cmd+D")}
+              <button
+                onClick={() =>
+                  alert("Ajoutez cette page à vos favoris avec Ctrl+D ou Cmd+D")
+                }
                 className="p-3 rounded-2xl bg-white border border-slate-200 hover:bg-slate-100 transition"
                 title="Ajouter aux favoris"
-                >
+              >
                 ⭐
-                </button>
+              </button>
             </div>
+
+            {copied && (
+              <p className="text-xs text-emerald-600 mt-2">
+                Lien copié ✅
+              </p>
+            )}
 
             <p className="text-xs text-slate-400 mt-2">
-                Gardez ce lien. Il donne accès à votre espace partenaire.
+              Gardez ce lien. Il donne accès à votre espace partenaire.
             </p>
-            </div>
-
-  <p className="text-xs text-slate-400 mt-2">
-    Gardez ce lien. Il donne accès à votre espace partenaire.
-  </p>
-</div>
+          </div>
 
           <div className="mt-6 flex flex-col sm:flex-row gap-3">
             <Link
