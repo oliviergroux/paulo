@@ -562,12 +562,20 @@ export default function Home() {
                                     >
                                       <option value="">Choisir un partenaire</option>
                                       {partners
-                                        .filter(
-                                          (p) =>
+                                        .filter((p) => {
+                                          const partnerCategory = p.category?.trim().toLowerCase();
+                                          const partnerSubtype = p.subtype?.trim().toLowerCase();
+                                          const requestCategory = req.category?.trim().toLowerCase();
+                                          const requestSubtype = req.subtype?.trim().toLowerCase();
+
+                                          return (
                                             p.is_active &&
-                                            p.category === req.category &&
-                                            (req.subtype ? p.subtype === req.subtype : true)
-                                        )
+                                            partnerCategory === requestCategory &&
+                                            (!requestSubtype ||
+                                              requestSubtype === "autre" ||
+                                              partnerSubtype === requestSubtype)
+                                          );
+                                        })
                                         .map((partner) => (
                                           <option key={partner.id} value={partner.id}>
                                             {partner.name}
