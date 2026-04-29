@@ -564,6 +564,7 @@ export default function Home() {
                                       {partners
                                         .filter(
                                           (p) =>
+                                            p.is_active &&
                                             p.category === req.category &&
                                             (req.subtype ? p.subtype === req.subtype : true)
                                         )
