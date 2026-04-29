@@ -5,6 +5,8 @@ import Link from "next/link";
 
 const APP_URL = "https://paulo-teal-nine.vercel.app";
 
+const [copied, setCopied] = useState(false);
+
 const SUBTYPES = {
   commerce: ["fleuriste", "boucher"],
   service_local: [
@@ -181,17 +183,42 @@ export default function BecomePartnerPage() {
 
           <div className="mt-6 rounded-3xl bg-slate-50 border border-slate-200 p-5">
             <p className="text-sm font-semibold text-slate-700 mb-2">
-              Votre lien partenaire
+                Votre lien partenaire
             </p>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-3 text-sm text-slate-600 break-all">
-              {partnerUrl}
+            <div className="flex items-center gap-2">
+                <div className="flex-1 bg-white border border-slate-200 rounded-2xl p-3 text-sm text-slate-600 break-all">
+                {partnerUrl}
+                </div>
+
+                {/* Copier */}
+                <button
+                onClick={() => navigator.clipboard.writeText(partnerUrl)}
+                className="p-3 rounded-2xl bg-white border border-slate-200 hover:bg-slate-100 transition"
+                title="Copier le lien"
+                >
+                📋
+                </button>
+
+                {/* Favoris */}
+                <button
+                onClick={() => alert("Ajoutez cette page à vos favoris avec Ctrl+D ou Cmd+D")}
+                className="p-3 rounded-2xl bg-white border border-slate-200 hover:bg-slate-100 transition"
+                title="Ajouter aux favoris"
+                >
+                ⭐
+                </button>
             </div>
 
             <p className="text-xs text-slate-400 mt-2">
-              Gardez ce lien. Il donne accès à votre espace partenaire.
+                Gardez ce lien. Il donne accès à votre espace partenaire.
             </p>
-          </div>
+            </div>
+
+  <p className="text-xs text-slate-400 mt-2">
+    Gardez ce lien. Il donne accès à votre espace partenaire.
+  </p>
+</div>
 
           <div className="mt-6 flex flex-col sm:flex-row gap-3">
             <Link
