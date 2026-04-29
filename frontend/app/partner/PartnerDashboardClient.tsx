@@ -214,7 +214,18 @@ export default function PartnerDashboardClient() {
                 {partner.category} / {partner.subtype}
               </p>
             </div>
-
+            {!partner.is_active && (
+                <div className="bg-orange-50 border border-orange-200 rounded-3xl p-5">
+                    <p className="font-semibold text-orange-800">
+                    ⏳ Validation en cours
+                    </p>
+                    <p className="text-sm text-orange-700 mt-2 leading-6">
+                    Votre profil est bien créé mais doit encore être validé par l’équipe Paulo.
+                    <br />
+                    Vous ne recevrez pas encore de demandes.
+                    </p>
+                </div>
+                )}
             <span
               className={`px-3 py-1 rounded-full text-sm font-medium w-fit ${
                 partner.is_active
@@ -222,7 +233,7 @@ export default function PartnerDashboardClient() {
                   : "bg-red-100 text-red-700"
               }`}
             >
-              {partner.is_active ? "Actif" : "Inactif"}
+              {partner.is_active ? "Actif" : "En attente validation"}
             </span>
           </div>
 
