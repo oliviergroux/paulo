@@ -1,15 +1,16 @@
 from fastapi import FastAPI, Request, Body
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
-
-import os
-import json
-import requests
-import psycopg2
-
+from pydantic import BaseModel, Field
 from psycopg2.extras import RealDictCursor
 from openai import OpenAI
 from twilio.rest import Client as TwilioClient
+
+import os
+import json
+import secrets
+import requests
+import psycopg2
 
 
 # =========================
@@ -23,7 +24,18 @@ twilio_client = TwilioClient(
     os.getenv("TWILIO_AUTH_TOKEN")
 )
 
+TWILIO_FROM_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
+APP_URL = os.getenv("APP_URL", "https://paulo-teal-nine.vercel.app")
+
+
+class PartnerCreate(BaseModel):
+    name: str = Field(..., min_length=2)
+    siret: str = Field(..., min_length=9)
+    phone: str = Field(..., min_length=8)
+    category: str = Field(..., min_length=2)
+    subtype: str = Field(..., min_length=2)
+    address: str = Field(..., min_length=5)
 
 
 def get_db_connection():
@@ -38,30 +50,104 @@ def normalize_french_phone(phone: str):
     if not phone:
         return None
 
-    phone = phone.replace(" ", "").replace(".", "")
+    cleaned = (
+        phone.strip()
+        .replace(" ", "")
+        .replace(".", "")
+        .replace("-", "")
+        .replace("/", "")
+        .replace("(", "")
+        .replace(")", "")
+    )
 
-    if phone.startswith("+33"):
-        return phone
+    if cleaned.startswith("whatsapp:"):
+        cleaned = cleaned.replace("whatsapp:", "")
 
-    if phone.startswith("0"):
-        return "+33" + phone[1:]
+    if cleaned.startswith("+33"):
+        return cleaned
 
-    return phone
+    if cleaned.startswith("0033"):
+        return "+" + cleaned[2:]
+
+    if cleaned.startswith("0") and len(cleaned) == 10:
+        return "+33" + cleaned[1:]
+
+    return cleaned
 
 
 def get_phone_type(phone: str):
-    if not phone:
+    normalized = normalize_french_phone(phone)
+
+    if not normalized:
         return "unknown"
 
-    phone = phone.replace(" ", "")
-
-    if phone.startswith("+336") or phone.startswith("+337"):
+    if normalized.startswith("+336") or normalized.startswith("+337"):
         return "mobile"
 
-    if phone.startswith("+331") or phone.startswith("+332") or phone.startswith("+333") or phone.startswith("+334") or phone.startswith("+335"):
+    if (
+        normalized.startswith("+331")
+        or normalized.startswith("+332")
+        or normalized.startswith("+333")
+        or normalized.startswith("+334")
+        or normalized.startswith("+335")
+    ):
         return "landline"
 
+    if normalized.startswith("+339"):
+        return "voip"
+
     return "unknown"
+
+
+def classify_category(message_text: str):
+    result = client.responses.create(
+        model="gpt-4o-mini",
+        input=f"""
+Classe cette demande dans UNE seule catégorie parmi :
+- transport : déplacement, taxi, trajet
+- commerce : achat d’un produit ou rdv commerce
+- service_local : prestation d’un professionnel, artisan, travaux, réparation
+- mairie : demande administrative, information ou problème dans la commune
+- autre
+
+Demande : {message_text}
+
+Réponds uniquement par le nom exact de la catégorie.
+"""
+    )
+    return result.output_text.strip().lower()
+
+
+def classify_subtype(category: str, message_text: str):
+    result = client.responses.create(
+        model="gpt-4o-mini",
+        input=f"""
+Tu dois extraire un sous-type précis à partir de la demande.
+
+Si category = commerce, réponds par un seul mot parmi :
+- fleuriste
+- boucher
+- autre
+
+Si category = service_local, réponds par un seul mot parmi :
+- plombier
+- electricien
+- maçon
+- pisciniste
+- petits_travaux
+- autre
+
+Si category = transport, réponds : taxi
+Si category = mairie, réponds : mairie
+Sinon réponds : autre
+
+Category : {category}
+Demande : {message_text}
+
+Réponds uniquement par le sous-type exact.
+"""
+    )
+    return result.output_text.strip().lower()
 
 
 def extract_client_info(message_text: str):
@@ -71,12 +157,17 @@ def extract_client_info(message_text: str):
             input=f"""
 Extrait les informations client depuis cette demande.
 
-Retourne uniquement du JSON valide :
+Retourne uniquement du JSON valide, sans markdown :
 {{
   "first_name": null,
   "last_name": null,
   "address": null
 }}
+
+Règles :
+- Si tu n'es pas sûr, mets null.
+- Ne devine pas.
+- L'adresse doit être complète si elle est mentionnée.
 
 Demande :
 {message_text}
@@ -122,6 +213,34 @@ def upsert_client(phone: str, message_text: str):
     return row["id"]
 
 
+def create_request_from_message(phone: str, message_text: str):
+    normalized_phone = normalize_french_phone(phone)
+    category = classify_category(message_text)
+    subtype = classify_subtype(category, message_text)
+    client_id = upsert_client(normalized_phone, message_text)
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO requests (phone, transcription, category, subtype, client_id)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                normalized_phone,
+                message_text,
+                category,
+                subtype,
+                client_id
+            ))
+
+    return {
+        "phone": normalized_phone,
+        "transcription": message_text,
+        "category": category,
+        "subtype": subtype,
+        "client_id": client_id,
+    }
+
+
 # =========================
 # APP INIT
 # =========================
@@ -152,18 +271,21 @@ def health():
 
 
 # =========================
-# VOICE FLOW
+# TWILIO VOICE
 # =========================
 
 @app.post("/twilio/voice")
-async def twilio_voice():
+async def twilio_voice(request: Request):
     twiml = """
     <Response>
         <Say language="fr-FR" voice="alice">
-            Bonjour, expliquez votre demande après le bip.
+            Bonjour, vous êtes sur Paulo. Expliquez votre demande après le bip.
         </Say>
-        <Record maxLength="120" playBeep="true"
-            action="https://paulo-backend.onrender.com/twilio/recording"/>
+        <Record 
+            maxLength="120" 
+            playBeep="true"
+            action="https://paulo-backend.onrender.com/twilio/recording"
+        />
     </Response>
     """
     return Response(content=twiml, media_type="application/xml")
@@ -176,13 +298,13 @@ async def recording(request: Request):
     recording_url = form.get("RecordingUrl")
     caller = form.get("From")
 
-    audio = requests.get(
+    audio_file = requests.get(
         recording_url + ".wav",
         auth=(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
     ).content
 
     with open("audio.wav", "wb") as f:
-        f.write(audio)
+        f.write(audio_file)
 
     with open("audio.wav", "rb") as f:
         transcript = client.audio.transcriptions.create(
@@ -190,77 +312,54 @@ async def recording(request: Request):
             file=f
         )
 
-    text = transcript.text
+    create_request_from_message(caller, transcript.text)
 
-    category = client.responses.create(
-        model="gpt-4o-mini",
-        input=f"Classe la demande : {text}"
+    return Response(
+        content="""
+        <Response>
+            <Say>Merci, votre demande a bien été enregistrée.</Say>
+        </Response>
+        """,
+        media_type="application/xml"
     )
-
-    subtype = client.responses.create(
-        model="gpt-4o-mini",
-        input=f"Donne le sous-type : {text}"
-    )
-
-    client_id = upsert_client(caller, text)
-
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO requests (phone, transcription, category, subtype, client_id)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (
-                normalize_french_phone(caller),
-                text,
-                category.output_text,
-                subtype.output_text,
-                client_id
-            ))
-
-    return Response("<Response><Say>Merci</Say></Response>", media_type="application/xml")
 
 
 # =========================
-# WHATSAPP INBOUND
+# TWILIO WHATSAPP INBOUND
 # =========================
 
 @app.post("/twilio/whatsapp")
 async def whatsapp_inbound(request: Request):
     form = await request.form()
 
-    phone = form.get("From")
-    message = form.get("Body")
+    message_body = form.get("Body")
+    sender = form.get("From")
+    phone = sender.replace("whatsapp:", "") if sender else sender
 
-    client_id = upsert_client(phone, message)
+    if not message_body:
+        return Response(
+            content="""
+            <Response>
+                <Message>Je n'ai pas reçu votre message. Pouvez-vous réessayer ?</Message>
+            </Response>
+            """,
+            media_type="application/xml"
+        )
 
-    category = client.responses.create(
-        model="gpt-4o-mini",
-        input=f"Classe la demande : {message}"
+    create_request_from_message(phone, message_body)
+
+    return Response(
+        content="""
+        <Response>
+            <Message>Merci, votre demande a bien été enregistrée.</Message>
+        </Response>
+        """,
+        media_type="application/xml"
     )
-
-    subtype = client.responses.create(
-        model="gpt-4o-mini",
-        input=f"Donne le sous-type : {message}"
-    )
-
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO requests (phone, transcription, category, subtype, client_id)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (
-                normalize_french_phone(phone),
-                message,
-                category.output_text,
-                subtype.output_text,
-                client_id
-            ))
-
-    return Response("<Response></Response>", media_type="application/xml")
 
 
 # =========================
-# GET REQUESTS
+# REQUESTS
 # =========================
 
 @app.get("/requests")
@@ -268,32 +367,73 @@ def get_requests():
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT r.*, 
-                       p.name as partner_name,
-                       c.first_name,
-                       c.last_name,
-                       c.address
+                SELECT 
+                    r.id,
+                    r.phone,
+                    r.transcription,
+                    r.category,
+                    r.subtype,
+                    r.status,
+                    r.assigned_partner_id,
+                    p.name AS partner_name,
+                    r.created_at,
+                    r.handled_at,
+                    r.archived,
+                    r.client_id,
+                    c.first_name,
+                    c.last_name,
+                    c.address
                 FROM requests r
                 LEFT JOIN partners p ON r.assigned_partner_id = p.id
                 LEFT JOIN clients c ON r.client_id = c.id
                 WHERE r.archived = false
                 ORDER BY r.created_at ASC
             """)
-            return cur.fetchall()
+            rows = cur.fetchall()
 
+    return rows
 
-# =========================
-# STATUS / ASSIGN
-# =========================
 
 @app.post("/requests/{request_id}/status")
 def update_status(request_id: int, status: str = Body(...)):
+    allowed_status = ["new", "in_progress", "done"]
+
+    if status not in allowed_status:
+        return {"error": "invalid_status"}
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            if status == "done":
+                cur.execute(
+                    """
+                    UPDATE requests
+                    SET status = %s, handled_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (status, request_id)
+                )
+            else:
+                cur.execute(
+                    """
+                    UPDATE requests
+                    SET status = %s
+                    WHERE id = %s
+                    """,
+                    (status, request_id)
+                )
+
+    return {"ok": True}
+
+
+@app.post("/requests/{request_id}/archive")
+def archive_request(request_id: int):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE requests SET status=%s WHERE id=%s",
-                (status, request_id)
+                "UPDATE requests SET archived = true WHERE id = %s",
+                (request_id,)
             )
+
     return {"ok": True}
 
 
@@ -303,23 +443,295 @@ def assign_request(request_id: int, payload: dict = Body(...)):
 
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM partners WHERE id=%s", (partner_id,))
+            cur.execute("""
+                SELECT id, name, phone, phone_type, access_token, is_active
+                FROM partners
+                WHERE id = %s
+            """, (partner_id,))
             partner = cur.fetchone()
 
             cur.execute("""
-                UPDATE requests
-                SET assigned_partner_id=%s
-                WHERE id=%s
-            """, (partner_id, request_id))
+                SELECT 
+                    r.id,
+                    r.phone,
+                    r.transcription,
+                    r.category,
+                    r.subtype,
+                    c.first_name,
+                    c.last_name,
+                    c.address
+                FROM requests r
+                LEFT JOIN clients c ON r.client_id = c.id
+                WHERE r.id = %s
+            """, (request_id,))
+            req = cur.fetchone()
 
-    if partner and partner["phone"]:
-        try:
-            twilio_client.messages.create(
-                body="Nouvelle demande Paulo 📩",
-                from_=TWILIO_WHATSAPP_NUMBER,
-                to="whatsapp:" + partner["phone"]
-            )
-        except Exception as e:
-            print("Erreur notif :", e)
+            if not partner or not req:
+                return {"error": "not_found"}
+
+            if not partner["is_active"]:
+                return {"error": "partner_inactive"}
+
+            cur.execute("""
+                UPDATE requests
+                SET assigned_to = %s,
+                    assigned_partner_id = %s
+                WHERE id = %s
+            """, ("partner", partner_id, request_id))
+
+    partner_url = (
+        f"{APP_URL}/partner?"
+        f"partner_id={partner['id']}&token={partner['access_token']}"
+    )
+
+    client_name = " ".join(
+        x for x in [req.get("first_name"), req.get("last_name")] if x
+    )
+
+    message = f"""Nouvelle demande Paulo 📩
+
+{req['transcription']}
+
+Catégorie : {req['category']} / {req['subtype']}
+Contact client : {req['phone']}
+"""
+
+    if client_name:
+        message += f"\nClient : {client_name}"
+
+    if req.get("address"):
+        message += f"\nAdresse : {req['address']}"
+
+    message += f"""
+
+Voir la demande :
+{partner_url}
+"""
+
+    phone_type = partner["phone_type"] or get_phone_type(partner["phone"])
+
+    if partner["phone"] and phone_type == "mobile":
+        if TWILIO_FROM_NUMBER:
+            try:
+                twilio_client.messages.create(
+                    body=message,
+                    from_=TWILIO_FROM_NUMBER,
+                    to=partner["phone"]
+                )
+                print("📨 SMS envoyé à", partner["name"])
+            except Exception as e:
+                print("❌ Erreur SMS :", e)
+
+        if TWILIO_WHATSAPP_NUMBER:
+            try:
+                twilio_client.messages.create(
+                    body=message,
+                    from_="whatsapp:" + TWILIO_WHATSAPP_NUMBER,
+                    to="whatsapp:" + partner["phone"]
+                )
+                print("💬 WhatsApp envoyé à", partner["name"])
+            except Exception as e:
+                print("❌ Erreur WhatsApp :", e)
+    else:
+        print("⚠️ Pas de SMS/WhatsApp : numéro non mobile", partner["phone"])
 
     return {"ok": True}
+
+
+# =========================
+# PARTNERS
+# =========================
+
+@app.get("/partners")
+def get_partners():
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    p.id,
+                    p.name,
+                    p.category,
+                    p.subtype,
+                    p.is_active,
+                    p.siret,
+                    p.phone,
+                    p.phone_type,
+                    p.address,
+                    COUNT(r.id) AS assigned_requests_count
+                FROM partners p
+                LEFT JOIN requests r
+                    ON r.assigned_partner_id = p.id
+                    AND r.archived = false
+                GROUP BY
+                    p.id,
+                    p.name,
+                    p.category,
+                    p.subtype,
+                    p.is_active,
+                    p.siret,
+                    p.phone,
+                    p.phone_type,
+                    p.address
+                ORDER BY p.is_active ASC, p.name ASC
+            """)
+            rows = cur.fetchall()
+
+    return rows
+
+
+@app.post("/partners/apply")
+def create_partner_application(partner: PartnerCreate):
+    allowed_categories = ["commerce", "service_local", "transport", "mairie"]
+
+    allowed_subtypes = {
+        "commerce": ["fleuriste", "boucher"],
+        "service_local": [
+            "plombier",
+            "electricien",
+            "maçon",
+            "pisciniste",
+            "petits_travaux",
+        ],
+        "transport": ["taxi"],
+        "mairie": ["mairie"],
+    }
+
+    category = partner.category.strip().lower()
+    subtype = partner.subtype.strip().lower()
+
+    if category not in allowed_categories:
+        return {"ok": False, "error": "invalid_category"}
+
+    if subtype not in allowed_subtypes.get(category, []):
+        return {"ok": False, "error": "invalid_subtype"}
+
+    normalized_phone = normalize_french_phone(partner.phone)
+    phone_type = get_phone_type(partner.phone)
+    access_token = secrets.token_urlsafe(32)
+
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                INSERT INTO partners (
+                    name,
+                    siret,
+                    phone,
+                    phone_type,
+                    category,
+                    subtype,
+                    address,
+                    is_active,
+                    access_token
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, false, %s)
+                RETURNING id, name, access_token, is_active
+            """, (
+                partner.name.strip(),
+                partner.siret.strip(),
+                normalized_phone,
+                phone_type,
+                category,
+                subtype,
+                partner.address.strip(),
+                access_token
+            ))
+
+            new_partner = cur.fetchone()
+
+    return {
+        "ok": True,
+        "partner": new_partner
+    }
+
+
+@app.post("/partners/{partner_id}/activate")
+def activate_partner(partner_id: int):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE partners
+                SET is_active = true
+                WHERE id = %s
+                """,
+                (partner_id,)
+            )
+
+    return {"ok": True}
+
+
+@app.post("/partners/{partner_id}/deactivate")
+def deactivate_partner(partner_id: int):
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE partners
+                SET is_active = false
+                WHERE id = %s
+                """,
+                (partner_id,)
+            )
+
+    return {"ok": True}
+
+
+@app.get("/partners/{partner_id}")
+def get_partner(partner_id: int, token: str = ""):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, name, category, subtype, is_active, created_at,
+                       access_token, siret, phone, phone_type, address
+                FROM partners
+                WHERE id = %s
+            """, (partner_id,))
+            partner = cur.fetchone()
+
+            if not partner:
+                return {"error": "not_found"}
+
+            if token and partner["access_token"] != token:
+                return {"error": "unauthorized"}
+
+    return partner
+
+
+@app.get("/partners/{partner_id}/requests")
+def get_partner_requests(partner_id: int, token: str = ""):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            if token:
+                cur.execute("""
+                    SELECT id, access_token
+                    FROM partners
+                    WHERE id = %s
+                """, (partner_id,))
+                partner = cur.fetchone()
+
+                if not partner or partner["access_token"] != token:
+                    return {"error": "unauthorized"}
+
+            cur.execute("""
+                SELECT 
+                    r.id,
+                    r.phone,
+                    r.transcription,
+                    r.category,
+                    r.subtype,
+                    r.status,
+                    r.created_at,
+                    r.handled_at,
+                    r.client_id,
+                    c.first_name,
+                    c.last_name,
+                    c.address
+                FROM requests r
+                LEFT JOIN clients c ON r.client_id = c.id
+                WHERE r.assigned_partner_id = %s
+                  AND r.archived = false
+                ORDER BY r.created_at ASC
+            """, (partner_id,))
+            rows = cur.fetchall()
+
+    return rows
