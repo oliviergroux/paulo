@@ -15,6 +15,7 @@ type Partner = {
   phone?: string;
   phone_type?: string;
   address?: string;
+  access_token?: string;
 };
 
 type RequestItem = {
