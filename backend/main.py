@@ -737,3 +737,82 @@ def get_partner_requests(partner_id: int, token: str = ""):
             rows = cur.fetchall()
 
     return rows
+
+    # =========================
+# CLIENTS
+# =========================
+
+@app.get("/clients")
+def get_clients():
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    c.id,
+                    c.phone,
+                    c.first_name,
+                    c.last_name,
+                    c.address,
+                    c.created_at,
+                    c.updated_at,
+                    COUNT(r.id) AS total_requests,
+                    MAX(r.created_at) AS last_request_at
+                FROM clients c
+                LEFT JOIN requests r ON r.client_id = c.id
+                GROUP BY
+                    c.id,
+                    c.phone,
+                    c.first_name,
+                    c.last_name,
+                    c.address,
+                    c.created_at,
+                    c.updated_at
+                ORDER BY COALESCE(MAX(r.created_at), c.updated_at) DESC
+            """)
+            return cur.fetchall()
+
+
+@app.get("/clients/{client_id}")
+def get_client_detail(client_id: int):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    id,
+                    phone,
+                    first_name,
+                    last_name,
+                    address,
+                    created_at,
+                    updated_at
+                FROM clients
+                WHERE id = %s
+            """, (client_id,))
+            client_row = cur.fetchone()
+
+            if not client_row:
+                return {"error": "not_found"}
+
+            cur.execute("""
+                SELECT
+                    r.id,
+                    r.phone,
+                    r.transcription,
+                    r.category,
+                    r.subtype,
+                    r.status,
+                    r.created_at,
+                    r.handled_at,
+                    r.assigned_partner_id,
+                    p.name AS partner_name
+                FROM requests r
+                LEFT JOIN partners p ON r.assigned_partner_id = p.id
+                WHERE r.client_id = %s
+                ORDER BY r.created_at DESC
+            """, (client_id,))
+            requests_rows = cur.fetchall()
+
+    return {
+        "client": client_row,
+        "requests": requests_rows
+    }

@@ -257,6 +257,12 @@ export default function Home() {
             >
               Partenaires
             </a>
+            <a
+              href="/clients"
+              className="block rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 hover:bg-white/10"
+            >
+              Clients
+            </a>
           </nav>
 
           <div className="mt-auto p-4">
