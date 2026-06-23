@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { adminFetch } from "@/lib/api";
 
 type Partner = {
   id: number;
@@ -22,22 +23,20 @@ export default function PartnersPage() {
   const [activeFilter, setActiveFilter] = useState("pending");
 
   const fetchPartners = async () => {
-    const res = await fetch("https://paulo-backend.onrender.com/partners", {
-      cache: "no-store",
-    });
+    const res = await adminFetch("/partners");
     const data = await res.json();
     setPartners(data);
   };
 
   const activatePartner = async (partnerId: number) => {
-    await fetch(`https://paulo-backend.onrender.com/partners/${partnerId}/activate`, {
+    await adminFetch(`/partners/${partnerId}/activate`, {
       method: "POST",
     });
     fetchPartners();
   };
 
   const deactivatePartner = async (partnerId: number) => {
-    await fetch(`https://paulo-backend.onrender.com/partners/${partnerId}/deactivate`, {
+    await adminFetch(`/partners/${partnerId}/deactivate`, {
       method: "POST",
     });
     fetchPartners();

@@ -1,16 +1,24 @@
-from fastapi import FastAPI, Request, Body
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Body
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from psycopg2.extras import RealDictCursor
 from openai import OpenAI
 from twilio.rest import Client as TwilioClient
+from typing import Optional
 
 import os
 import json
 import secrets
 import requests
-import psycopg2
+
+from auth import (
+    is_valid_admin_key,
+    partner_can_update_request,
+    require_admin,
+    verify_partner_token,
+)
+from db import get_db_connection
 
 
 # =========================
@@ -27,6 +35,7 @@ twilio_client = TwilioClient(
 TWILIO_FROM_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 APP_URL = os.getenv("APP_URL", "https://paulo-teal-nine.vercel.app")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://paulo-backend.onrender.com")
 
 
 class PartnerCreate(BaseModel):
@@ -36,10 +45,6 @@ class PartnerCreate(BaseModel):
     category: str = Field(..., min_length=2)
     subtype: str = Field(..., min_length=2)
     address: str = Field(..., min_length=5)
-
-
-def get_db_connection():
-    return psycopg2.connect(os.getenv("DATABASE_URL"), sslmode="require")
 
 
 # =========================
@@ -278,7 +283,7 @@ def debug_routes():
 
 @app.post("/twilio/voice")
 async def twilio_voice(request: Request):
-    twiml = """
+    twiml = f"""
     <Response>
         <Say language="fr-FR" voice="alice">
             Bonjour, vous êtes sur Paulo. Expliquez votre demande après le bip.
@@ -286,7 +291,7 @@ async def twilio_voice(request: Request):
         <Record 
             maxLength="120" 
             playBeep="true"
-            action="https://paulo-backend.onrender.com/twilio/recording"
+            action="{BACKEND_URL}/twilio/recording"
         />
     </Response>
     """
@@ -365,7 +370,7 @@ async def whatsapp_inbound(request: Request):
 # =========================
 
 @app.get("/requests")
-def get_requests():
+def get_requests(_admin=Depends(require_admin)):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
@@ -397,11 +402,36 @@ def get_requests():
 
 
 @app.post("/requests/{request_id}/status")
-def update_status(request_id: int, status: str = Body(...)):
+def update_status(
+    request_id: int,
+    status: str = Body(...),
+    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
+    x_partner_token: Optional[str] = Header(default=None, alias="X-Partner-Token"),
+    x_partner_id: Optional[str] = Header(default=None, alias="X-Partner-Id"),
+):
     allowed_status = ["new", "in_progress", "done"]
 
     if status not in allowed_status:
         return {"error": "invalid_status"}
+
+    is_admin = is_valid_admin_key(x_admin_key)
+    is_partner = False
+
+    if not is_admin:
+        if not x_partner_id or not x_partner_token:
+            raise HTTPException(status_code=401, detail="unauthorized")
+
+        try:
+            partner_id = int(x_partner_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=401, detail="unauthorized") from exc
+
+        is_partner = partner_can_update_request(
+            partner_id, x_partner_token, request_id
+        )
+
+        if not is_partner:
+            raise HTTPException(status_code=401, detail="unauthorized")
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -428,7 +458,7 @@ def update_status(request_id: int, status: str = Body(...)):
 
 
 @app.post("/requests/{request_id}/archive")
-def archive_request(request_id: int):
+def archive_request(request_id: int, _admin=Depends(require_admin)):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -440,7 +470,9 @@ def archive_request(request_id: int):
 
 
 @app.post("/requests/{request_id}/assign")
-def assign_request(request_id: int, payload: dict = Body(...)):
+def assign_request(
+    request_id: int, payload: dict = Body(...), _admin=Depends(require_admin)
+):
     partner_id = payload.get("partner_id")
 
     with get_db_connection() as conn:
@@ -545,7 +577,7 @@ Voir la demande :
 # =========================
 
 @app.get("/partners")
-def get_partners():
+def get_partners(_admin=Depends(require_admin)):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
@@ -647,7 +679,7 @@ def create_partner_application(partner: PartnerCreate):
 
 
 @app.post("/partners/{partner_id}/activate")
-def activate_partner(partner_id: int):
+def activate_partner(partner_id: int, _admin=Depends(require_admin)):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -663,7 +695,7 @@ def activate_partner(partner_id: int):
 
 
 @app.post("/partners/{partner_id}/deactivate")
-def deactivate_partner(partner_id: int):
+def deactivate_partner(partner_id: int, _admin=Depends(require_admin)):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -679,7 +711,11 @@ def deactivate_partner(partner_id: int):
 
 
 @app.get("/partners/{partner_id}")
-def get_partner(partner_id: int, token: str = ""):
+def get_partner(
+    partner_id: int,
+    token: str = "",
+    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
+):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
@@ -693,27 +729,32 @@ def get_partner(partner_id: int, token: str = ""):
             if not partner:
                 return {"error": "not_found"}
 
-            if token and partner["access_token"] != token:
-                return {"error": "unauthorized"}
+            is_admin = is_valid_admin_key(x_admin_key)
+            has_partner_token = token and verify_partner_token(partner_id, token)
+
+            if not is_admin and not has_partner_token:
+                raise HTTPException(status_code=401, detail="unauthorized")
+
+            if not is_admin:
+                partner.pop("access_token", None)
 
     return partner
 
 
 @app.get("/partners/{partner_id}/requests")
-def get_partner_requests(partner_id: int, token: str = ""):
+def get_partner_requests(
+    partner_id: int,
+    token: str = "",
+    x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
+):
+    is_admin = is_valid_admin_key(x_admin_key)
+    has_partner_token = token and verify_partner_token(partner_id, token)
+
+    if not is_admin and not has_partner_token:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            if token:
-                cur.execute("""
-                    SELECT id, access_token
-                    FROM partners
-                    WHERE id = %s
-                """, (partner_id,))
-                partner = cur.fetchone()
-
-                if not partner or partner["access_token"] != token:
-                    return {"error": "unauthorized"}
-
             cur.execute("""
                 SELECT 
                     r.id,
@@ -738,12 +779,13 @@ def get_partner_requests(partner_id: int, token: str = ""):
 
     return rows
 
-    # =========================
+
+# =========================
 # CLIENTS
 # =========================
 
 @app.get("/clients")
-def get_clients():
+def get_clients(_admin=Depends(require_admin)):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
@@ -773,7 +815,7 @@ def get_clients():
 
 
 @app.get("/clients/{client_id}")
-def get_client_detail(client_id: int):
+def get_client_detail(client_id: int, _admin=Depends(require_admin)):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""

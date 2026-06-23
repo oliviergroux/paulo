@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { adminFetch } from "@/lib/api";
 
 type Partner = {
   id: number;
@@ -41,18 +42,13 @@ export default function PartnerDetailPage() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const fetchPartner = async () => {
-    const res = await fetch(`https://paulo-backend.onrender.com/partners/${id}`, {
-      cache: "no-store",
-    });
+    const res = await adminFetch(`/partners/${id}`);
     const data = await res.json();
     setPartner(data);
   };
 
   const fetchRequests = async () => {
-    const res = await fetch(
-      `https://paulo-backend.onrender.com/partners/${id}/requests`,
-      { cache: "no-store" }
-    );
+    const res = await adminFetch(`/partners/${id}/requests`);
     const data = await res.json();
 
     if (Array.isArray(data)) {

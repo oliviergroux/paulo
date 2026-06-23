@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { adminFetch } from "@/lib/api";
 
 type Client = {
   id: number;
@@ -36,9 +37,7 @@ export default function ClientDetailPage() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const fetchClient = async () => {
-    const res = await fetch(`https://paulo-backend.onrender.com/clients/${id}`, {
-      cache: "no-store",
-    });
+    const res = await adminFetch(`/clients/${id}`);
     const data = await res.json();
 
     if (data.client) {

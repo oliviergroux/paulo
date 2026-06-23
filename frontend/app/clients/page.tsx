@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { adminFetch } from "@/lib/api";
 
 type Client = {
   id: number;
@@ -20,9 +21,7 @@ export default function ClientsPage() {
   const [search, setSearch] = useState("");
 
   const fetchClients = async () => {
-    const res = await fetch("https://paulo-backend.onrender.com/clients", {
-      cache: "no-store",
-    });
+    const res = await adminFetch("/clients");
     const data = await res.json();
     setClients(Array.isArray(data) ? data : []);
   };

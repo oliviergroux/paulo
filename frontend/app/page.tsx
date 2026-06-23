@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
+import { adminFetch } from "@/lib/api";
 
 type Request = {
   id: number;
@@ -126,9 +127,7 @@ export default function Home() {
   );
 
   const fetchRequests = async () => {
-    const res = await fetch("https://paulo-backend.onrender.com/requests", {
-      cache: "no-store",
-    });
+    const res = await adminFetch("/requests");
     const data: Request[] = await res.json();
 
     const currentIds = new Set(data.map((req) => req.id));
@@ -167,15 +166,13 @@ export default function Home() {
   };
 
   const fetchPartners = async () => {
-    const res = await fetch("https://paulo-backend.onrender.com/partners", {
-      cache: "no-store",
-    });
+    const res = await adminFetch("/partners");
     const data = await res.json();
     setPartners(data);
   };
 
   const markAsDone = async (id: number) => {
-    await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
+    await adminFetch(`/requests/${id}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify("done"),
@@ -185,7 +182,7 @@ export default function Home() {
   };
 
   const markAsInProgress = async (id: number) => {
-    await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
+    await adminFetch(`/requests/${id}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify("in_progress"),
@@ -198,7 +195,7 @@ export default function Home() {
     const partnerId = selectedPartners[requestId];
     if (!partnerId) return;
 
-    await fetch(`https://paulo-backend.onrender.com/requests/${requestId}/assign`, {
+    await adminFetch(`/requests/${requestId}/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ partner_id: Number(partnerId) }),
@@ -208,11 +205,16 @@ export default function Home() {
   };
 
   const archiveRequest = async (requestId: number) => {
-    await fetch(`https://paulo-backend.onrender.com/requests/${requestId}/archive`, {
+    await adminFetch(`/requests/${requestId}/archive`, {
       method: "POST",
     });
 
     fetchRequests();
+  };
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
   };
 
   useEffect(() => {
@@ -265,13 +267,19 @@ export default function Home() {
             </a>
           </nav>
 
-          <div className="mt-auto p-4">
+          <div className="mt-auto p-4 space-y-2">
             <div className="rounded-3xl bg-white/10 p-4">
               <p className="text-sm font-medium">Live monitoring</p>
               <p className="text-xs text-slate-400 mt-1">
                 Mise à jour automatique toutes les 2 secondes.
               </p>
             </div>
+            <button
+              onClick={handleLogout}
+              className="w-full rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 hover:bg-white/10 text-left"
+            >
+              Déconnexion
+            </button>
           </div>
         </aside>
 

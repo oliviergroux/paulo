@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 
-const APP_URL = "https://paulo-teal-nine.vercel.app";
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL || "https://paulo-teal-nine.vercel.app";
 
 const SUBTYPES = {
   commerce: ["fleuriste", "boucher"],
@@ -129,7 +130,7 @@ export default function BecomePartnerPage() {
     }
 
     try {
-      const res = await fetch("https://paulo-backend.onrender.com/partners/apply", {
+      const res = await fetch("/api/public/partners/apply", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { partnerFetch } from "@/lib/api";
 
 type Partner = {
   id: number;
@@ -36,23 +37,21 @@ export default function PartnerDashboardClient() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   const fetchPartner = async () => {
-    if (!partnerId) return;
+    if (!partnerId || !token) return;
 
-    const res = await fetch(
-      `https://paulo-backend.onrender.com/partners/${partnerId}?token=${token || ""}`,
-      { cache: "no-store" }
-    );
+    const res = await partnerFetch(`/partners/${partnerId}`, token, partnerId);
 
     const data = await res.json();
     setPartner(data);
   };
 
   const fetchRequests = async () => {
-    if (!partnerId) return;
+    if (!partnerId || !token) return;
 
-    const res = await fetch(
-      `https://paulo-backend.onrender.com/partners/${partnerId}/requests?token=${token || ""}`,
-      { cache: "no-store" }
+    const res = await partnerFetch(
+      `/partners/${partnerId}/requests`,
+      token,
+      partnerId
     );
 
     const data = await res.json();
@@ -63,7 +62,9 @@ export default function PartnerDashboardClient() {
   };
 
   const markAsInProgress = async (id: number) => {
-    await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
+    if (!partnerId || !token) return;
+
+    await partnerFetch(`/requests/${id}/status`, token, partnerId, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify("in_progress"),
@@ -73,7 +74,9 @@ export default function PartnerDashboardClient() {
   };
 
   const markAsDone = async (id: number) => {
-    await fetch(`https://paulo-backend.onrender.com/requests/${id}/status`, {
+    if (!partnerId || !token) return;
+
+    await partnerFetch(`/requests/${id}/status`, token, partnerId, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify("done"),
