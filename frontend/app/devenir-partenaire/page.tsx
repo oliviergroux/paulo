@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SUBTYPES, subtypeLabel } from "@/lib/taxonomy";
 import {
@@ -38,6 +38,76 @@ const PROFILE_COPY = {
   },
 };
 
+const LOADING_STEPS = [
+  "Envoi de votre dossier…",
+  "Création du profil partenaire…",
+  "Vérification SIRET auprès du registre officiel…",
+  "Analyse de cohérence du dossier…",
+  "Finalisation…",
+];
+
+function PartnerApplyLoadingOverlay({
+  stepIndex,
+  progress,
+}: {
+  stepIndex: number;
+  progress: number;
+}) {
+  const step = LOADING_STEPS[Math.min(stepIndex, LOADING_STEPS.length - 1)];
+
+  return (
+    <div className="absolute inset-0 z-20 flex items-center justify-center rounded-[32px] bg-white/95 backdrop-blur-sm p-6">
+      <div className="w-full max-w-md text-center">
+        <div className="mx-auto mb-5 h-14 w-14 rounded-3xl bg-blue-100 text-blue-700 flex items-center justify-center">
+          <svg
+            className="h-7 w-7 animate-spin"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-90"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            />
+          </svg>
+        </div>
+
+        <p className="text-sm font-semibold text-blue-600 mb-1">
+          Inscription en cours
+        </p>
+        <h2 className="text-xl font-bold text-slate-900">
+          Vérification de votre dossier
+        </h2>
+        <p className="text-sm text-slate-600 mt-3 leading-6 min-h-[3rem]">
+          {step}
+        </p>
+        <p className="text-xs text-slate-400 mt-2">
+          Cela peut prendre 10 à 30 secondes. Merci de ne pas fermer la page.
+        </p>
+
+        <div className="mt-6 h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-blue-600 to-slate-900 transition-all duration-700 ease-out"
+            style={{ width: `${Math.min(progress, 100)}%` }}
+          />
+        </div>
+        <p className="text-xs font-semibold text-slate-500 mt-2">
+          {Math.min(Math.round(progress), 100)} %
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function BecomePartnerPage() {
   const [form, setForm] = useState({
     name: "",
@@ -60,6 +130,8 @@ export default function BecomePartnerPage() {
   } | null>(null);
 
   const [loading, setLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [acceptedLegal, setAcceptedLegal] = useState(false);
@@ -91,6 +163,36 @@ export default function BecomePartnerPage() {
     });
   };
 
+  useEffect(() => {
+    if (!loading) {
+      setLoadingStep(0);
+      setLoadingProgress(0);
+      return;
+    }
+
+    setLoadingStep(0);
+    setLoadingProgress(8);
+
+    const stepTimer = window.setInterval(() => {
+      setLoadingStep((current) =>
+        Math.min(current + 1, LOADING_STEPS.length - 1)
+      );
+    }, 2800);
+
+    const progressTimer = window.setInterval(() => {
+      setLoadingProgress((current) => {
+        if (current >= 92) return current;
+        const increment = current < 40 ? 6 : current < 75 ? 4 : 2;
+        return Math.min(current + increment, 92);
+      });
+    }, 900);
+
+    return () => {
+      window.clearInterval(stepTimer);
+      window.clearInterval(progressTimer);
+    };
+  }, [loading]);
+
   const copyPartnerUrl = async () => {
     try {
       await navigator.clipboard.writeText(partnerUrl);
@@ -102,7 +204,6 @@ export default function BecomePartnerPage() {
   };
 
   const submit = async () => {
-    setLoading(true);
     setError("");
 
     if (
@@ -117,31 +218,26 @@ export default function BecomePartnerPage() {
       !form.email.trim()
     ) {
       setError("Merci de remplir tous les champs.");
-      setLoading(false);
       return;
     }
 
     if (!isValidCompanyIdentifier(form.siret)) {
       setError("Merci d’indiquer un SIREN (9 chiffres) ou un SIRET (14 chiffres).");
-      setLoading(false);
       return;
     }
 
     if (!isValidPostalCode(form.postal_code)) {
       setError("Merci d’indiquer un code postal à 5 chiffres.");
-      setLoading(false);
       return;
     }
 
     if (!isValidEmail(form.email)) {
       setError("Merci d’indiquer une adresse email valide.");
-      setLoading(false);
       return;
     }
 
     if (form.phone.trim().length < 8) {
       setError("Merci d’indiquer un numéro de téléphone valide.");
-      setLoading(false);
       return;
     }
 
@@ -149,9 +245,10 @@ export default function BecomePartnerPage() {
       setError(
         "Merci d’accepter les conditions et la politique de confidentialité pour continuer."
       );
-      setLoading(false);
       return;
     }
+
+    setLoading(true);
 
     try {
       const res = await fetch("/api/public/partners/apply", {
@@ -189,6 +286,8 @@ export default function BecomePartnerPage() {
         return;
       }
 
+      setLoadingProgress(100);
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
       setCreatedPartner(data.partner);
     } catch {
       setError("Impossible d’envoyer la demande.");
@@ -347,7 +446,20 @@ export default function BecomePartnerPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6">
-          <div className="bg-white border border-slate-200 rounded-[32px] shadow-sm p-6 space-y-5">
+          <div className="relative bg-white border border-slate-200 rounded-[32px] shadow-sm p-6 space-y-5">
+            {loading && (
+              <PartnerApplyLoadingOverlay
+                stepIndex={loadingStep}
+                progress={loadingProgress}
+              />
+            )}
+
+            <fieldset
+              disabled={loading}
+              className={`space-y-5 border-0 p-0 m-0 min-w-0 ${
+                loading ? "opacity-40 pointer-events-none" : ""
+              }`}
+            >
             <div>
               <label className="block text-sm font-semibold mb-2">
                 Nom de l’entreprise
@@ -505,12 +617,14 @@ export default function BecomePartnerPage() {
             </div>
 
             <button
+              type="button"
               onClick={submit}
               disabled={loading || !acceptedLegal}
-              className="w-full bg-slate-950 hover:bg-slate-800 text-white px-5 py-3 rounded-2xl font-semibold disabled:bg-slate-400"
+              className="w-full bg-slate-950 hover:bg-slate-800 text-white px-5 py-3 rounded-2xl font-semibold disabled:bg-slate-400 disabled:cursor-not-allowed"
             >
-              {loading ? "Envoi..." : "Créer mon profil partenaire"}
+              {loading ? "Vérification en cours…" : "Créer mon profil partenaire"}
             </button>
+            </fieldset>
           </div>
 
           <aside className="bg-slate-950 text-white rounded-[32px] p-6 h-fit">
