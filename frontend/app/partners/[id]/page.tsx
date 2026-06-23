@@ -13,6 +13,7 @@ import RequestCard from "@/components/RequestCard";
 import StatusBadge from "@/components/StatusBadge";
 import { adminFetch } from "@/lib/api";
 import { formatDate, phoneTypeClass, phoneTypeLabel } from "@/lib/format";
+import { formatPartnerFullAddress } from "@/lib/partner-address";
 import type { PartnerDetail, RequestItem } from "@/lib/types";
 
 export default function PartnerDetailPage() {
@@ -39,6 +40,9 @@ export default function PartnerDetailPage() {
     siret: string;
     phone: string;
     address: string;
+    postal_code?: string | null;
+    city?: string | null;
+    email?: string | null;
     category: string;
     subtype: string;
     commune_id?: number | null;
@@ -144,7 +148,15 @@ export default function PartnerDetailPage() {
               Adresse
             </p>
             <p className="font-semibold text-slate-900 mt-2">
-              {partner.address || "Non renseignée"}
+              {formatPartnerFullAddress(partner) || "Non renseignée"}
+            </p>
+          </div>
+          <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4 xl:col-span-2">
+            <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
+              Email
+            </p>
+            <p className="font-semibold text-slate-900 mt-2">
+              {partner.email || "Non renseigné"}
             </p>
           </div>
         </div>

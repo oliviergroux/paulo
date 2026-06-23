@@ -137,10 +137,42 @@ def resolve_commune_id_from_inbound_phone(inbound_to: Optional[str]) -> Optional
     return row["id"] if row else None
 
 
-def resolve_commune_id_for_partner(address: str) -> Optional[int]:
-    postal_code = extract_postal_code(address)
-    if postal_code:
-        commune = get_active_commune_by_postal_code(postal_code)
+def is_valid_email(email: str) -> bool:
+    cleaned = (email or "").strip()
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", cleaned))
+
+
+def format_partner_full_address(partner: dict) -> str:
+    line = (partner.get("address") or "").strip()
+    postal = (partner.get("postal_code") or "").strip()
+    city = (partner.get("city") or "").strip()
+    locality = " ".join(part for part in [postal, city] if part)
+    parts = [part for part in [line, locality] if part]
+    return ", ".join(parts)
+
+
+def build_partner_validation_payload(partner: dict) -> dict:
+    return {
+        "name": partner.get("name"),
+        "siret": partner.get("siret"),
+        "phone": partner.get("phone"),
+        "address": format_partner_full_address(partner),
+        "address_line": partner.get("address"),
+        "postal_code": partner.get("postal_code"),
+        "city": partner.get("city"),
+        "email": partner.get("email"),
+        "category": partner.get("category"),
+        "subtype": partner.get("subtype"),
+    }
+
+
+def resolve_commune_id_for_partner(
+    address: str = "",
+    postal_code: Optional[str] = None,
+) -> Optional[int]:
+    code = (postal_code or "").strip() or extract_postal_code(address)
+    if code:
+        commune = get_active_commune_by_postal_code(code)
         if commune:
             return commune["id"]
 

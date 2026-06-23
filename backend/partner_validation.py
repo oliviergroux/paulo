@@ -199,7 +199,11 @@ Déclaration partenaire :
 - Nom déclaré : {partner.get("name")}
 - {identifier_label} déclaré : {partner.get("siret")}
 - Téléphone : {partner.get("phone")}
-- Adresse déclarée : {partner.get("address")}
+- Adresse (voie) : {partner.get("address_line") or partner.get("address")}
+- Code postal : {partner.get("postal_code")}
+- Ville : {partner.get("city")}
+- Adresse complète : {partner.get("address")}
+- Email : {partner.get("email")}
 - Catégorie Paulo : {partner.get("category")}
 - Sous-type Paulo : {partner.get("subtype")} ({subtype_label(partner.get("subtype", ""))})
 - Sous-types possibles pour cette catégorie : {_build_subtype_context(partner.get("category", ""))}

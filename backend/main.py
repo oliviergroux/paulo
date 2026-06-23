@@ -21,8 +21,11 @@ from auth import (
     verify_partner_token,
 )
 from communes import (
+    build_partner_validation_payload,
+    format_partner_full_address,
     get_commune_by_id,
     get_default_commune_id,
+    is_valid_email,
     resolve_commune_id_for_partner,
     resolve_commune_id_for_request,
     resolve_commune_id_from_inbound_phone,
@@ -62,7 +65,10 @@ class PartnerCreate(BaseModel):
     phone: str = Field(..., min_length=8)
     category: str = Field(..., min_length=2)
     subtype: str = Field(..., min_length=2)
-    address: str = Field(..., min_length=5)
+    address: str = Field(..., min_length=3)
+    postal_code: str = Field(..., min_length=4)
+    city: str = Field(..., min_length=2)
+    email: str = Field(..., min_length=5)
 
 
 class ClientUpdate(BaseModel):
@@ -79,6 +85,9 @@ class PartnerUpdate(BaseModel):
     category: Optional[str] = None
     subtype: Optional[str] = None
     address: Optional[str] = None
+    postal_code: Optional[str] = None
+    city: Optional[str] = None
+    email: Optional[str] = None
     commune_id: Optional[int] = None
 
 
@@ -1048,6 +1057,9 @@ def get_partners(
                     p.phone,
                     p.phone_type,
                     p.address,
+                    p.postal_code,
+                    p.city,
+                    p.email,
                     p.commune_id,
                     p.validation_status,
                     p.validation_confidence,
@@ -1072,6 +1084,9 @@ def get_partners(
                     p.phone,
                     p.phone_type,
                     p.address,
+                    p.postal_code,
+                    p.city,
+                    p.email,
                     p.commune_id,
                     p.validation_status,
                     p.validation_confidence,
@@ -1103,19 +1118,36 @@ def create_partner_application(partner: PartnerCreate):
     normalized_phone = normalize_french_phone(partner.phone)
     phone_type = get_phone_type(partner.phone)
     access_token = secrets.token_urlsafe(32)
-    commune_id = resolve_commune_id_for_partner(partner.address.strip())
+    postal_code = re.sub(r"\D", "", partner.postal_code.strip())
+    city = partner.city.strip()
+    email = partner.email.strip().lower()
+
+    if len(postal_code) != 5:
+        return {"ok": False, "error": "invalid_postal_code"}
+
+    if not is_valid_email(email):
+        return {"ok": False, "error": "invalid_email"}
+
+    commune_id = resolve_commune_id_for_partner(
+        partner.address.strip(),
+        postal_code=postal_code,
+    )
     siret_digits = re.sub(r"\D", "", partner.siret.strip())
     if len(siret_digits) not in (9, 14):
         return {"ok": False, "error": "invalid_siret"}
 
-    partner_payload = {
+    partner_row = {
         "name": partner.name.strip(),
         "siret": partner.siret.strip(),
         "phone": normalized_phone,
         "category": category,
         "subtype": subtype,
         "address": partner.address.strip(),
+        "postal_code": postal_code,
+        "city": city,
+        "email": email,
     }
+    partner_payload = build_partner_validation_payload(partner_row)
 
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1128,21 +1160,27 @@ def create_partner_application(partner: PartnerCreate):
                     category,
                     subtype,
                     address,
+                    postal_code,
+                    city,
+                    email,
                     commune_id,
                     is_active,
                     access_token,
                     validation_status
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, false, %s, 'pending')
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, false, %s, 'pending')
                 RETURNING id, name, access_token, is_active
             """, (
-                partner_payload["name"],
-                partner_payload["siret"],
+                partner_row["name"],
+                partner_row["siret"],
                 normalized_phone,
                 phone_type,
                 category,
                 subtype,
-                partner_payload["address"],
+                partner_row["address"],
+                postal_code,
+                city,
+                email,
                 commune_id,
                 access_token,
             ))
@@ -1253,7 +1291,7 @@ def revalidate_partner(partner_id: int, _admin=Depends(require_admin)):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, name, siret, phone, category, subtype, address, is_active
+                SELECT id, name, siret, phone, category, subtype, address, postal_code, city, email, is_active
                 FROM partners
                 WHERE id = %s
                 """,
@@ -1264,7 +1302,9 @@ def revalidate_partner(partner_id: int, _admin=Depends(require_admin)):
             if not partner:
                 return {"ok": False, "error": "not_found"}
 
-            validation = validate_partner_application(partner)
+            validation = validate_partner_application(
+                build_partner_validation_payload(partner)
+            )
             row = persist_partner_validation(cur, partner, validation)
 
     return {"ok": True, "partner": row, "validation": validation}
@@ -1276,7 +1316,7 @@ def revalidate_pending_partners(_admin=Depends(require_admin)):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, name, siret, phone, category, subtype, address, is_active
+                SELECT id, name, siret, phone, category, subtype, address, postal_code, city, email, is_active
                 FROM partners
                 WHERE validation_report IS NULL
                    OR (
@@ -1290,7 +1330,9 @@ def revalidate_pending_partners(_admin=Depends(require_admin)):
 
             updated = []
             for partner in partners:
-                validation = validate_partner_application(partner)
+                validation = validate_partner_application(
+                    build_partner_validation_payload(partner)
+                )
                 row = persist_partner_validation(cur, partner, validation)
                 updated.append(
                     {
@@ -1332,7 +1374,8 @@ def get_partner(
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT id, name, category, subtype, is_active, created_at,
-                       access_token, siret, phone, phone_type, address, commune_id
+                       access_token, siret, phone, phone_type, address,
+                       postal_code, city, email, commune_id
                 FROM partners
                 WHERE id = %s
             """, (partner_id,))
@@ -1646,7 +1689,8 @@ def update_partner(partner_id: int, payload: PartnerUpdate, _admin=Depends(requi
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, name, siret, phone, phone_type, category, subtype, address, is_active
+                SELECT id, name, siret, phone, phone_type, category, subtype,
+                       address, postal_code, city, email, is_active
                 FROM partners
                 WHERE id = %s
                 """,
@@ -1703,15 +1747,35 @@ def update_partner(partner_id: int, payload: PartnerUpdate, _admin=Depends(requi
                 fields.append("address = %s")
                 values.append(payload.address.strip())
 
+            if payload.postal_code is not None:
+                fields.append("postal_code = %s")
+                values.append(re.sub(r"\D", "", payload.postal_code.strip()))
+
+            if payload.city is not None:
+                fields.append("city = %s")
+                values.append(payload.city.strip())
+
+            if payload.email is not None:
+                email = payload.email.strip().lower()
+                if not is_valid_email(email):
+                    return {"ok": False, "error": "invalid_email"}
+                fields.append("email = %s")
+                values.append(email)
+
             if payload.commune_id is not None:
                 commune = get_commune_by_id(payload.commune_id)
                 if not commune:
                     return {"ok": False, "error": "invalid_commune"}
                 fields.append("commune_id = %s")
                 values.append(payload.commune_id)
-            elif payload.address is not None:
+            elif payload.postal_code is not None or payload.address is not None:
                 resolved_commune_id = resolve_commune_id_for_partner(
-                    payload.address.strip()
+                    (payload.address or existing["address"] or "").strip(),
+                    postal_code=(
+                        re.sub(r"\D", "", payload.postal_code.strip())
+                        if payload.postal_code is not None
+                        else existing.get("postal_code")
+                    ),
                 )
                 if resolved_commune_id is not None:
                     fields.append("commune_id = %s")
@@ -1728,7 +1792,8 @@ def update_partner(partner_id: int, payload: PartnerUpdate, _admin=Depends(requi
                 SET {", ".join(fields)}
                 WHERE id = %s
                 RETURNING id, name, siret, phone, phone_type, category, subtype,
-                          address, commune_id, is_active, access_token, created_at
+                          address, postal_code, city, email, commune_id, is_active,
+                          access_token, created_at
                 """,
                 values,
             )

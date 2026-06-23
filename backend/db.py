@@ -166,6 +166,24 @@ def ensure_schema():
             )
             cur.execute(
                 """
+                ALTER TABLE partners
+                ADD COLUMN IF NOT EXISTS postal_code VARCHAR(10)
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE partners
+                ADD COLUMN IF NOT EXISTS city VARCHAR(128)
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE partners
+                ADD COLUMN IF NOT EXISTS email VARCHAR(255)
+                """
+            )
+            cur.execute(
+                """
                 UPDATE clients c
                 SET commune_id = sub.commune_id
                 FROM (

@@ -35,6 +35,9 @@ export type PartnerDetail = PartnerSummary & {
   phone?: string;
   phone_type?: string;
   address?: string;
+  postal_code?: string | null;
+  city?: string | null;
+  email?: string | null;
   commune_id?: number | null;
   commune_name?: string | null;
   validation_status?: string | null;

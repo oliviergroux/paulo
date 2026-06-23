@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CommuneItem, PartnerDetail } from "@/lib/types";
 import { SUBTYPES, subtypeLabel } from "@/lib/taxonomy";
 import { adminFetch } from "@/lib/api";
+import { normalizePostalCode } from "@/lib/partner-address";
 
 type PartnerEditFormProps = {
   partner: PartnerDetail;
@@ -12,6 +13,9 @@ type PartnerEditFormProps = {
     siret: string;
     phone: string;
     address: string;
+    postal_code?: string | null;
+    city?: string | null;
+    email?: string | null;
     category: string;
     subtype: string;
     commune_id?: number | null;
@@ -31,6 +35,9 @@ export default function PartnerEditForm({
     siret: partner.siret || "",
     phone: partner.phone || "",
     address: partner.address || "",
+    postal_code: partner.postal_code || "",
+    city: partner.city || "",
+    email: partner.email || "",
     category: partner.category || "commerce",
     subtype: partner.subtype || "",
     commune_id: partner.commune_id != null ? String(partner.commune_id) : "",
@@ -58,6 +65,9 @@ export default function PartnerEditForm({
         siret: form.siret.trim(),
         phone: form.phone.trim(),
         address: form.address.trim(),
+        postal_code: normalizePostalCode(form.postal_code),
+        city: form.city.trim(),
+        email: form.email.trim().toLowerCase(),
         category: form.category,
         subtype: form.subtype,
         commune_id: form.commune_id ? Number(form.commune_id) : null,
@@ -98,7 +108,7 @@ export default function PartnerEditForm({
         <input
           value={form.siret}
           onChange={(e) => setForm((f) => ({ ...f, siret: e.target.value }))}
-          placeholder="SIRET"
+          placeholder="SIREN ou SIRET"
           className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
         />
         <input
@@ -106,6 +116,13 @@ export default function PartnerEditForm({
           onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
           placeholder="Téléphone"
           className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+        />
+        <input
+          value={form.email}
+          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          placeholder="Email"
+          type="email"
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm md:col-span-2"
         />
         <select
           value={form.category}
@@ -142,7 +159,7 @@ export default function PartnerEditForm({
             }
             className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm md:col-span-2"
           >
-            <option value="">Commune (auto depuis l'adresse si vide)</option>
+            <option value="">Commune (auto depuis le code postal si vide)</option>
             {communes.map((commune) => (
               <option key={commune.id} value={commune.id}>
                 {commune.name} ({commune.postal_code})
@@ -153,8 +170,25 @@ export default function PartnerEditForm({
         <input
           value={form.address}
           onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-          placeholder="Adresse"
+          placeholder="Adresse (numéro et rue)"
           className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm md:col-span-2"
+        />
+        <input
+          value={form.postal_code}
+          onChange={(e) =>
+            setForm((f) => ({
+              ...f,
+              postal_code: normalizePostalCode(e.target.value),
+            }))
+          }
+          placeholder="Code postal"
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+        />
+        <input
+          value={form.city}
+          onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+          placeholder="Ville"
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
         />
       </div>
 

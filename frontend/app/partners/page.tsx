@@ -16,6 +16,7 @@ import {
   validationStatusClass,
 } from "@/lib/partner-validation";
 import { phoneTypeClass, phoneTypeLabel } from "@/lib/format";
+import { formatPartnerFullAddress } from "@/lib/partner-address";
 import type { PartnerDetail } from "@/lib/types";
 
 export default function PartnersPage() {
@@ -246,7 +247,16 @@ export default function PartnersPage() {
                       Adresse
                     </p>
                     <p className="font-medium text-slate-900 mt-1">
-                      {partner.address || "Non renseignée"}
+                      {formatPartnerFullAddress(partner) || "Non renseignée"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 border border-slate-200 p-3 md:col-span-2">
+                    <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold">
+                      Email
+                    </p>
+                    <p className="font-medium text-slate-900 mt-1">
+                      {partner.email || "Non renseigné"}
                     </p>
                   </div>
                 </div>

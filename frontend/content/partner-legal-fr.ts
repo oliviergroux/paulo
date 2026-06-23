@@ -78,7 +78,7 @@ export const PARTNER_PRIVACY_SECTIONS: { title: string; paragraphs: string[] }[]
   {
     title: "2. Données collectées",
     paragraphs: [
-      "Lors de votre candidature, nous collectons notamment : nom ou raison sociale, SIRET, téléphone, adresse, catégorie et sous-type d’activité Paulo.",
+      "Lors de votre candidature, nous collectons notamment : nom ou raison sociale, SIRET, téléphone, adresse (voie), code postal, ville, email, catégorie et sous-type d’activité Paulo.",
       "Nous enregistrons également le résultat de la vérification SIRET (données publiques consultées) et, le cas échéant, un rapport d’analyse interne de cohérence du dossier.",
     ],
   },

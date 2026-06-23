@@ -11,6 +11,11 @@ import {
   companyIdentifierHint,
   isValidCompanyIdentifier,
 } from "@/lib/company-identifier";
+import {
+  isValidEmail,
+  isValidPostalCode,
+  normalizePostalCode,
+} from "@/lib/partner-address";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://paulo-teal-nine.vercel.app";
@@ -41,6 +46,9 @@ export default function BecomePartnerPage() {
     category: "commerce",
     subtype: "",
     address: "",
+    postal_code: "",
+    city: "",
+    email: "",
   });
 
   const [createdPartner, setCreatedPartner] = useState<{
@@ -103,7 +111,10 @@ export default function BecomePartnerPage() {
       !form.phone.trim() ||
       !form.category.trim() ||
       !form.subtype.trim() ||
-      !form.address.trim()
+      !form.address.trim() ||
+      !form.postal_code.trim() ||
+      !form.city.trim() ||
+      !form.email.trim()
     ) {
       setError("Merci de remplir tous les champs.");
       setLoading(false);
@@ -112,6 +123,18 @@ export default function BecomePartnerPage() {
 
     if (!isValidCompanyIdentifier(form.siret)) {
       setError("Merci d’indiquer un SIREN (9 chiffres) ou un SIRET (14 chiffres).");
+      setLoading(false);
+      return;
+    }
+
+    if (!isValidPostalCode(form.postal_code)) {
+      setError("Merci d’indiquer un code postal à 5 chiffres.");
+      setLoading(false);
+      return;
+    }
+
+    if (!isValidEmail(form.email)) {
+      setError("Merci d’indiquer une adresse email valide.");
       setLoading(false);
       return;
     }
@@ -143,6 +166,9 @@ export default function BecomePartnerPage() {
           category: form.category.trim(),
           subtype: form.subtype.trim(),
           address: form.address.trim(),
+          postal_code: normalizePostalCode(form.postal_code),
+          city: form.city.trim(),
+          email: form.email.trim().toLowerCase(),
         }),
       });
 
@@ -150,8 +176,14 @@ export default function BecomePartnerPage() {
       console.log("Partner apply response:", data);
 
       if (!res.ok || !data.ok) {
+        const errorMessages: Record<string, string> = {
+          invalid_siret: "Merci d’indiquer un SIREN (9 chiffres) ou un SIRET (14 chiffres).",
+          invalid_postal_code: "Merci d’indiquer un code postal à 5 chiffres.",
+          invalid_email: "Merci d’indiquer une adresse email valide.",
+        };
         setError(
-          data?.detail?.[0]?.msg ||
+          errorMessages[data?.error] ||
+            data?.detail?.[0]?.msg ||
             "Une erreur est survenue. Merci de vérifier les informations."
         );
         return;
@@ -366,14 +398,55 @@ export default function BecomePartnerPage() {
 
             <div>
               <label className="block text-sm font-semibold mb-2">
-                Adresse
+                Adresse (numéro et rue)
               </label>
               <input
                 value={form.address}
                 onChange={(e) => updateField("address", e.target.value)}
                 className="w-full border border-slate-200 rounded-2xl px-4 py-3"
-                placeholder="Adresse complète"
+                placeholder="Ex : 12 rue de la Mairie"
               />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2">
+                  Code postal
+                </label>
+                <input
+                  value={form.postal_code}
+                  onChange={(e) =>
+                    updateField("postal_code", normalizePostalCode(e.target.value))
+                  }
+                  className="w-full border border-slate-200 rounded-2xl px-4 py-3"
+                  placeholder="07120"
+                  inputMode="numeric"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2">Ville</label>
+                <input
+                  value={form.city}
+                  onChange={(e) => updateField("city", e.target.value)}
+                  className="w-full border border-slate-200 rounded-2xl px-4 py-3"
+                  placeholder="Saint-Paul-le-Jeune"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-2">Email</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => updateField("email", e.target.value)}
+                className="w-full border border-slate-200 rounded-2xl px-4 py-3"
+                placeholder="contact@mon-entreprise.fr"
+                autoComplete="email"
+              />
+              <p className="text-xs text-slate-400 mt-2">
+                Pour vous contacter et confirmer votre inscription.
+              </p>
             </div>
 
             <div>
