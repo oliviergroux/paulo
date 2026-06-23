@@ -9,6 +9,7 @@ import {
   isPartnerUnanalyzed,
   validationStatusClass,
 } from "@/lib/partner-validation";
+import { normalizeCompanyIdentifierDigits } from "@/lib/company-identifier";
 import type { PartnerDetail } from "@/lib/types";
 
 type DashboardPartnerReviewListProps = {
@@ -70,7 +71,14 @@ export default function DashboardPartnerReviewList({
                   <p className="font-semibold text-slate-900">{partner.name}</p>
                   <p className="text-xs text-slate-500 mt-1">
                     {partner.commune_name || "Commune non renseignée"}
-                    {partner.siret ? ` · SIRET ${partner.siret}` : ""}
+                      {partner.siret
+                      ? ` · ${
+                          normalizeCompanyIdentifierDigits(partner.siret).length ===
+                          9
+                            ? "SIREN"
+                            : "SIRET"
+                        } ${partner.siret}`
+                      : ""}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">

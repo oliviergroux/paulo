@@ -73,6 +73,9 @@ export default function PartnerValidationPanel({
         <div className="rounded-2xl bg-white border border-slate-200 p-3 text-sm">
           <p className="text-xs uppercase tracking-wide text-slate-400 font-semibold mb-1">
             Registre SIRENE
+            {(sirene as { input_kind?: string }).input_kind === "siren"
+              ? " · via SIREN (siège)"
+              : ""}
           </p>
           <p className="font-medium text-slate-900">{sirene.company_name}</p>
           {sirene.official_address && (

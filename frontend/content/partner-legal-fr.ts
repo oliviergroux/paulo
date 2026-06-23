@@ -2,7 +2,7 @@
 export const LEGAL_CONTACT_EMAIL = "contact@paulo.fr";
 
 export const PARTNER_FORM_SIRET_NOTICE =
-  "Votre SIRET sera vérifié auprès du registre officiel des entreprises (data.gouv.fr).";
+  "SIREN (9 chiffres) ou SIRET (14 chiffres) — vérifié auprès du registre officiel (data.gouv.fr). Avec un SIREN, nous comparons votre dossier au siège social.";
 
 export const PARTNER_FORM_VALIDATION_NOTICE =
   "Nous analysons la cohérence de votre dossier (nom, adresse, activité). En cas de doute, un administrateur valide manuellement. Vous pouvez contester une décision en écrivant à " +

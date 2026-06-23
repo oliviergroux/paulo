@@ -7,6 +7,10 @@ import {
   PARTNER_FORM_SIRET_NOTICE,
   PARTNER_FORM_VALIDATION_NOTICE,
 } from "@/content/partner-legal-fr";
+import {
+  companyIdentifierHint,
+  isValidCompanyIdentifier,
+} from "@/lib/company-identifier";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://paulo-teal-nine.vercel.app";
@@ -106,8 +110,8 @@ export default function BecomePartnerPage() {
       return;
     }
 
-    if (form.siret.trim().length < 9) {
-      setError("Merci d’indiquer un SIRET valide.");
+    if (!isValidCompanyIdentifier(form.siret)) {
+      setError("Merci d’indiquer un SIREN (9 chiffres) ou un SIRET (14 chiffres).");
       setLoading(false);
       return;
     }
@@ -325,16 +329,24 @@ export default function BecomePartnerPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold mb-2">SIRET</label>
+              <label className="block text-sm font-semibold mb-2">
+                SIREN ou SIRET
+              </label>
               <input
                 value={form.siret}
                 onChange={(e) => updateField("siret", e.target.value)}
                 className="w-full border border-slate-200 rounded-2xl px-4 py-3"
-                placeholder="Ex : 12345678900012"
+                placeholder="SIREN 9 chiffres ou SIRET 14 chiffres"
+                inputMode="numeric"
               />
               <p className="text-xs text-slate-500 mt-2 leading-5">
                 {PARTNER_FORM_SIRET_NOTICE}
               </p>
+              {form.siret.trim() && (
+                <p className="text-xs text-blue-600 mt-1">
+                  {companyIdentifierHint(form.siret)}
+                </p>
+              )}
             </div>
 
             <div>

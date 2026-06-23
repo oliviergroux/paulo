@@ -9,6 +9,7 @@ from typing import Optional
 
 import os
 import json
+import re
 import secrets
 import requests
 
@@ -1103,6 +1104,10 @@ def create_partner_application(partner: PartnerCreate):
     phone_type = get_phone_type(partner.phone)
     access_token = secrets.token_urlsafe(32)
     commune_id = resolve_commune_id_for_partner(partner.address.strip())
+    siret_digits = re.sub(r"\D", "", partner.siret.strip())
+    if len(siret_digits) not in (9, 14):
+        return {"ok": False, "error": "invalid_siret"}
+
     partner_payload = {
         "name": partner.name.strip(),
         "siret": partner.siret.strip(),

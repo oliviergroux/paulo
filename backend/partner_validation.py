@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import requests
 from openai import OpenAI
@@ -13,63 +13,39 @@ AUTO_APPROVE_CONFIDENCE = 0.99
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+CompanyIdKind = Literal["siret", "siren"]
+
+
+def normalize_company_identifier(raw: str) -> Optional[tuple[str, CompanyIdKind]]:
+    digits = re.sub(r"\D", "", raw or "")
+    if len(digits) == 14:
+        return digits, "siret"
+    if len(digits) == 9:
+        return digits, "siren"
+    return None
+
 
 def normalize_siret(raw: str) -> Optional[str]:
-    digits = re.sub(r"\D", "", raw or "")
-    return digits if len(digits) == 14 else None
-
-
-def lookup_siret(raw_siret: str) -> Optional[dict[str, Any]]:
-    siret = normalize_siret(raw_siret)
-    if not siret:
+    parsed = normalize_company_identifier(raw)
+    if not parsed:
         return None
+    return parsed[0]
 
-    try:
-        response = requests.get(
-            SIRENE_SEARCH_URL,
-            params={"q": siret, "per_page": 5},
-            timeout=12,
-        )
-        response.raise_for_status()
-        payload = response.json()
-    except Exception:
-        return None
 
-    results = payload.get("results") or []
-    if not results:
-        return None
-
-    company = results[0]
-    establishment = None
-    siret_exact_match = False
-
-    siege = company.get("siege") or {}
-    if siege.get("siret") == siret:
-        establishment = siege
-        siret_exact_match = True
-    else:
-        for etab in company.get("matching_etablissements") or []:
-            if etab.get("siret") == siret:
-                establishment = etab
-                siret_exact_match = True
-                break
-
-        if establishment is None and company.get("siren") == siret[:9]:
-            establishment = siege
-            siret_exact_match = siege.get("siret") == siret
-
-    if not establishment:
-        return {
-            "found": False,
-            "siret": siret,
-            "company_name": company.get("nom_complet")
-            or company.get("nom_raison_sociale"),
-            "siren": company.get("siren"),
-        }
-
+def _build_company_snapshot(
+    company: dict[str, Any],
+    establishment: dict[str, Any],
+    *,
+    input_value: str,
+    input_kind: CompanyIdKind,
+    siret_exact_match: bool,
+    found: bool,
+) -> dict[str, Any]:
     return {
-        "found": True,
-        "siret": siret,
+        "found": found,
+        "input_kind": input_kind,
+        "input_value": input_value,
+        "siret": establishment.get("siret") or input_value,
         "siret_exact_match": siret_exact_match,
         "company_name": company.get("nom_complet")
         or company.get("nom_raison_sociale"),
@@ -87,6 +63,121 @@ def lookup_siret(raw_siret: str) -> Optional[dict[str, Any]]:
     }
 
 
+def _search_sirene(query: str) -> list[dict[str, Any]]:
+    try:
+        response = requests.get(
+            SIRENE_SEARCH_URL,
+            params={"q": query, "per_page": 10},
+            timeout=12,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception:
+        return []
+
+    return payload.get("results") or []
+
+
+def _find_company_by_siren(
+    results: list[dict[str, Any]], siren: str
+) -> Optional[dict[str, Any]]:
+    for company in results:
+        if company.get("siren") == siren:
+            return company
+    return results[0] if results else None
+
+
+def lookup_siret(raw_identifier: str) -> Optional[dict[str, Any]]:
+    parsed = normalize_company_identifier(raw_identifier)
+    if not parsed:
+        return None
+
+    identifier, kind = parsed
+    results = _search_sirene(identifier)
+    if not results:
+        return None
+
+    if kind == "siren":
+        company = _find_company_by_siren(results, identifier)
+        if not company:
+            return None
+
+        establishment = company.get("siege") or {}
+        if not establishment:
+            return {
+                "found": False,
+                "input_kind": "siren",
+                "input_value": identifier,
+                "siret": identifier,
+                "siret_exact_match": False,
+                "company_name": company.get("nom_complet")
+                or company.get("nom_raison_sociale"),
+                "siren": company.get("siren"),
+            }
+
+        return _build_company_snapshot(
+            company,
+            establishment,
+            input_value=identifier,
+            input_kind="siren",
+            siret_exact_match=False,
+            found=True,
+        )
+
+    siret = identifier
+    company = None
+    establishment = None
+    siret_exact_match = False
+
+    for candidate in results:
+        siege = candidate.get("siege") or {}
+        if siege.get("siret") == siret:
+            company = candidate
+            establishment = siege
+            siret_exact_match = True
+            break
+
+        for etab in candidate.get("matching_etablissements") or []:
+            if etab.get("siret") == siret:
+                company = candidate
+                establishment = etab
+                siret_exact_match = True
+                break
+
+        if establishment:
+            break
+
+        if candidate.get("siren") == siret[:9]:
+            company = candidate
+            establishment = candidate.get("siege") or {}
+            siret_exact_match = establishment.get("siret") == siret
+            break
+
+    if not company:
+        company = results[0]
+
+    if not establishment:
+        return {
+            "found": False,
+            "input_kind": "siret",
+            "input_value": siret,
+            "siret": siret,
+            "siret_exact_match": False,
+            "company_name": company.get("nom_complet")
+            or company.get("nom_raison_sociale"),
+            "siren": company.get("siren"),
+        }
+
+    return _build_company_snapshot(
+        company,
+        establishment,
+        input_value=siret,
+        input_kind="siret",
+        siret_exact_match=siret_exact_match,
+        found=True,
+    )
+
+
 def _build_subtype_context(category: str) -> str:
     subtypes = PARTNER_SUBTYPES.get(category, [])
     return ", ".join(f"{subtype} ({subtype_label(subtype)})" for subtype in subtypes)
@@ -96,6 +187,9 @@ def analyze_partner_with_ai(
     partner: dict[str, Any],
     sirene: Optional[dict[str, Any]],
 ) -> dict[str, Any]:
+    input_kind = (sirene or {}).get("input_kind")
+    identifier_label = "SIREN" if input_kind == "siren" else "SIRET / SIREN"
+
     prompt = f"""
 Tu es l'agent de validation partenaire de Paulo (réseau local de commerces, artisans, transport).
 
@@ -103,7 +197,7 @@ Compare la déclaration du partenaire avec les données officielles SIRENE (si d
 
 Déclaration partenaire :
 - Nom déclaré : {partner.get("name")}
-- SIRET : {partner.get("siret")}
+- {identifier_label} déclaré : {partner.get("siret")}
 - Téléphone : {partner.get("phone")}
 - Adresse déclarée : {partner.get("address")}
 - Catégorie Paulo : {partner.get("category")}
@@ -114,11 +208,12 @@ Données SIRENE :
 {json.dumps(sirene or {"found": False}, ensure_ascii=False, indent=2)}
 
 Règles :
-1. Le SIRET doit exister et l'établissement doit être actif (etat_administratif = A).
-2. Le nom déclaré doit correspondre raisonnablement au nom officiel (enseigne ou raison sociale).
-3. L'adresse déclarée doit être cohérente avec l'adresse SIRENE (même commune / CP acceptable).
-4. Le code NAF / activité doit être compatible avec le sous-type Paulo déclaré.
-5. Le téléphone n'est pas vérifiable via SIRENE — ne bloque pas une validation auto si le reste est parfait.
+1. L'entreprise doit exister dans SIRENE et l'établissement retenu doit être actif (etat_administratif = A).
+2. Si seul un SIREN (9 chiffres) a été fourni, la comparaison se fait avec le siège social — c'est acceptable mais ne force pas auto_approve.
+3. Le nom déclaré doit correspondre raisonnablement au nom officiel (enseigne ou raison sociale).
+4. L'adresse déclarée doit être cohérente avec l'adresse SIRENE (même commune / CP acceptable).
+5. Le code NAF / activité doit être compatible avec le sous-type Paulo déclaré.
+6. Le téléphone n'est pas vérifiable via SIRENE — ne bloque pas une validation auto si le reste est parfait.
 
 Réponds UNIQUEMENT en JSON valide avec cette structure :
 {{
@@ -128,15 +223,15 @@ Réponds UNIQUEMENT en JSON valide avec cette structure :
   "summary": "Résumé court en français pour l'admin",
   "checks": [
     {{
-      "id": "siret_found",
-      "label": "SIRET trouvé",
+      "id": "company_found",
+      "label": "Entreprise trouvée",
       "ok": true,
       "detail": "..."
     }}
   ]
 }}
 
-auto_approve = true UNIQUEMENT si tu es certain à 100% (confidence >= 0.99) ET SIRET actif ET nom/adresse/activité cohérents.
+auto_approve = true UNIQUEMENT si tu es certain à 100% (confidence >= 0.99) ET établissement actif ET SIRET exact fourni (input_kind = siret) ET nom/adresse/activité cohérents.
 Sinon recommendation = review sauf fraude évidente (reject).
 """
 
@@ -185,8 +280,8 @@ def resolve_validation_outcome(
         sirene
         and sirene.get("found")
         and sirene.get("etat_administratif") == "A"
-        and sirene.get("siret_exact_match", True)
     )
+    siret_exact = bool(sirene and sirene.get("siret_exact_match"))
 
     if recommendation == "reject":
         return {
@@ -200,6 +295,8 @@ def resolve_validation_outcome(
         auto_approve
         and confidence >= AUTO_APPROVE_CONFIDENCE
         and sirene_active
+        and siret_exact
+        and sirene.get("input_kind") == "siret"
         and recommendation == "approve"
     ):
         return {
