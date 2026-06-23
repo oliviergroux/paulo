@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
 import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
@@ -96,23 +95,15 @@ export default function PartnerDashboardClient() {
           title={`Dashboard — ${partner.name}`}
           description={`${partner.category} / ${partner.subtype}`}
           actions={
-            <>
-              <span
-                className={`px-4 py-2 rounded-full text-sm font-semibold ${
-                  partner.is_active
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-orange-100 text-orange-700"
-                }`}
-              >
-                {partner.is_active ? "Actif" : "Validation en cours"}
-              </span>
-              <Link
-                href="/login"
-                className="rounded-2xl bg-white border border-slate-200 px-5 py-3 text-sm font-semibold hover:bg-slate-50"
-              >
-                Admin
-              </Link>
-            </>
+            <span
+              className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                partner.is_active
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-orange-100 text-orange-700"
+              }`}
+            >
+              {partner.is_active ? "Actif" : "Validation en cours"}
+            </span>
           }
         />
 

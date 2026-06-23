@@ -135,10 +135,17 @@ export function resolveRoleFromPassword(password: string): UserRole | null {
   return null;
 }
 
-export const ADMIN_ONLY_PATHS = ["/", "/partners", "/devenir-partenaire", "/communes"];
+export const ADMIN_ONLY_PATHS = [
+  "/",
+  "/demandes",
+  "/partners",
+  "/devenir-partenaire",
+  "/communes",
+];
 
 export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname === "/") return true;
+  if (pathname.startsWith("/demandes")) return true;
   if (pathname.startsWith("/partners")) return true;
   if (pathname === "/devenir-partenaire") return true;
   if (pathname.startsWith("/communes")) return true;

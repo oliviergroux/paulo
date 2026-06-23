@@ -76,6 +76,7 @@ export type UserRole = "admin" | "mairie";
 
 export type AdminNav =
   | "dashboard"
+  | "demandes"
   | "mairie"
   | "mairie_archives"
   | "partners"

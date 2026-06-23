@@ -76,7 +76,7 @@ export default function PartnersPage() {
               Ajouter un partenaire
             </Link>
             <Link
-              href="/"
+              href="/demandes"
               className="rounded-2xl bg-white border border-slate-200 text-slate-700 px-5 py-3 text-sm font-medium shadow-sm hover:bg-slate-50 transition"
             >
               Retour demandes

@@ -1,367 +1,240 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import AuthenticatedShell from "@/components/AuthenticatedShell";
-import DayDivider from "@/components/DayDivider";
-import KpiCard from "@/components/KpiCard";
-import PageHeader from "@/components/PageHeader";
-import RequestCard from "@/components/RequestCard";
-import RequestWorkflow, { matchingPartners } from "@/components/RequestWorkflow";
-import CommuneFilter from "@/components/CommuneFilter";
+import AdminCategoryChart from "@/components/AdminCategoryChart";
+import CategoryBadge from "@/components/CategoryBadge";
+import StatusBadge from "@/components/StatusBadge";
 import { adminFetch } from "@/lib/api";
+import {
+  computeAdminCategoryStats,
+  countActivePartners,
+  countActiveRequests,
+  countPendingPartners,
+  getPendingPartners,
+  getPriorityRequests,
+} from "@/lib/admin-stats";
 import { formatDayLabel, isUrgentRequest } from "@/lib/format";
-import { mairieServiceOptions } from "@/lib/taxonomy";
-import type { PartnerSummary, RequestItem } from "@/lib/types";
+import type { CommuneItem, PartnerDetail, RequestItem } from "@/lib/types";
 
-const MAIRIE_SERVICE_OPTIONS = mairieServiceOptions();
-
-export default function Home() {
+export default function AdminDashboardPage() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
-  const [partners, setPartners] = useState<PartnerSummary[]>([]);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [communeFilter, setCommuneFilter] = useState<number | null>(null);
-  const [highlightedIds, setHighlightedIds] = useState<number[]>([]);
-  const [soundEnabled, setSoundEnabled] = useState(false);
-  const [selectedPartners, setSelectedPartners] = useState<Record<number, string>>({});
-  const [selectedServices, setSelectedServices] = useState<Record<number, string>>({});
-  const [quickFilters, setQuickFilters] = useState({
-    today: false,
-    urgent: false,
-    inProgress: false,
-    done: false,
-  });
+  const [partners, setPartners] = useState<PartnerDetail[]>([]);
+  const [communes, setCommunes] = useState<CommuneItem[]>([]);
 
-  const seenIdsRef = useRef<Set<number>>(new Set());
-  const isFirstLoadRef = useRef(true);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fetchData = async () => {
+    const [requestsRes, partnersRes, communesRes] = await Promise.all([
+      adminFetch("/requests"),
+      adminFetch("/partners"),
+      adminFetch("/communes"),
+    ]);
 
-  const toggleQuickFilter = (key: keyof typeof quickFilters) => {
-    setQuickFilters((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const resetFilters = () => {
-    setStatusFilter("all");
-    setCategoryFilter("all");
-    setQuickFilters({
-      today: false,
-      urgent: false,
-      inProgress: false,
-      done: false,
-    });
-  };
-
-  const todayCount = requests.filter(
-    (req) => formatDayLabel(req.created_at) === "Aujourd’hui"
-  ).length;
-  const urgentCount = requests.filter(isUrgentRequest).length;
-  const inProgressCount = requests.filter((r) => r.status === "in_progress").length;
-  const doneCount = requests.filter((r) => r.status === "done").length;
-
-  const filteredRequests = requests
-    .filter((req) => (statusFilter === "all" ? true : req.status === statusFilter))
-    .filter((req) => (categoryFilter === "all" ? true : req.category === categoryFilter))
-    .filter((req) =>
-      quickFilters.today ? formatDayLabel(req.created_at) === "Aujourd’hui" : true
-    )
-    .filter((req) => (quickFilters.urgent ? isUrgentRequest(req) : true))
-    .filter((req) => (quickFilters.inProgress ? req.status === "in_progress" : true))
-    .filter((req) => (quickFilters.done ? req.status === "done" : true))
-    .sort(
-      (a, b) =>
-        new Date(a.created_at + "Z").getTime() -
-        new Date(b.created_at + "Z").getTime()
-    );
-
-  const groupedRequests = filteredRequests.reduce(
-    (acc: Record<string, RequestItem[]>, req) => {
-      const label = formatDayLabel(req.created_at);
-      if (!acc[label]) acc[label] = [];
-      acc[label].push(req);
-      return acc;
-    },
-    {}
-  );
-
-  const fetchRequests = async () => {
-    const query = communeFilter != null ? `?commune_id=${communeFilter}` : "";
-    const res = await adminFetch(`/requests${query}`);
-    const data: RequestItem[] = await res.json();
-    const currentIds = new Set(data.map((req) => req.id));
-
-    if (isFirstLoadRef.current) {
-      seenIdsRef.current = currentIds;
-      setRequests(data);
-      isFirstLoadRef.current = false;
-      return;
-    }
-
-    const trulyNew = data.filter((req) => !seenIdsRef.current.has(req.id));
-
-    if (trulyNew.length > 0) {
-      const newRequestIds = trulyNew.map((req) => req.id);
-      setHighlightedIds((prev) => [...new Set([...prev, ...newRequestIds])]);
-
-      if (soundEnabled && audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => {});
-      }
-
-      newRequestIds.forEach((id) => {
-        setTimeout(() => {
-          setHighlightedIds((prev) => prev.filter((x) => x !== id));
-        }, 4000);
-      });
-    }
-
-    seenIdsRef.current = currentIds;
-    setRequests(data);
-  };
-
-  const fetchPartners = async () => {
-    const query = communeFilter != null ? `?commune_id=${communeFilter}` : "";
-    const res = await adminFetch(`/partners${query}`);
-    setPartners(await res.json());
-  };
-
-  const markAsDone = async (id: number) => {
-    await adminFetch(`/requests/${id}/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify("done"),
-    });
-    fetchRequests();
-  };
-
-  const markAsInProgress = async (id: number) => {
-    await adminFetch(`/requests/${id}/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify("in_progress"),
-    });
-    fetchRequests();
-  };
-
-  const assignPartner = async (requestId: number) => {
-    const partnerId = selectedPartners[requestId];
-    if (!partnerId) return;
-
-    await adminFetch(`/requests/${requestId}/assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ partner_id: Number(partnerId) }),
-    });
-    fetchRequests();
-  };
-
-  const assignMairieService = async (requestId: number) => {
-    const service = selectedServices[requestId];
-    if (!service) return;
-
-    await adminFetch(`/requests/${requestId}/assign-service`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ service }),
-    });
-    fetchRequests();
-  };
-
-  const archiveRequest = async (requestId: number) => {
-    await adminFetch(`/requests/${requestId}/archive`, { method: "POST" });
-    fetchRequests();
+    if (requestsRes.ok) setRequests(await requestsRes.json());
+    if (partnersRes.ok) setPartners(await partnersRes.json());
+    if (communesRes.ok) setCommunes(await communesRes.json());
   };
 
   useEffect(() => {
-    audioRef.current = new Audio("/notification.mp3");
-    audioRef.current.preload = "auto";
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    fetchRequests();
-    fetchPartners();
-    const interval = setInterval(fetchRequests, 2000);
-    return () => clearInterval(interval);
-  }, [communeFilter]);
+  const activeCount = countActiveRequests(requests);
+  const categoryStats = computeAdminCategoryStats(requests);
+  const pendingPartners = getPendingPartners(partners);
+  const pendingCount = countPendingPartners(partners);
+  const activePartnerCount = countActivePartners(partners);
+  const priorityRequests = getPriorityRequests(requests);
+  const todayCount = requests.filter(
+    (req) => formatDayLabel(req.created_at).startsWith("Aujourd")
+  ).length;
+  const newCount = requests.filter((req) => req.status === "new").length;
+  const inProgressCount = requests.filter(
+    (req) => req.status === "in_progress"
+  ).length;
+  const urgentCount = requests.filter(isUrgentRequest).length;
+  const activeCommunes = communes.filter((commune) => commune.is_active).length;
 
   return (
     <AuthenticatedShell
       activeNav="dashboard"
+      maxWidth="full"
       sidebarNote={{
-        title: "Live monitoring",
-        description: "Mise à jour automatique toutes les 2 secondes.",
+        title: "Pilotage Paulo",
+        description: "Vue globale de l'activité plateforme.",
       }}
     >
-      <PageHeader
-        eyebrow="Centre opérationnel"
-        title="Demandes entrantes"
-        description="Téléphone, WhatsApp, qualification IA et dispatch partenaires."
-        actions={
-          <>
+      <div className="mb-8 rounded-[32px] bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 text-white p-6 md:p-8 shadow-lg shadow-slate-300/40">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+          <div>
+            <p className="text-blue-200 text-sm font-medium tracking-wide uppercase">
+              Administration Paulo
+            </p>
+            <h1 className="text-3xl md:text-4xl font-bold mt-2 tracking-tight">
+              Tableau de bord
+            </h1>
+            <p className="text-slate-300/90 mt-2 max-w-xl text-sm md:text-base">
+              Vue d&apos;ensemble de l&apos;activité : demandes, partenaires et
+              territoires couverts.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/demandes"
+              className="rounded-2xl bg-white/10 backdrop-blur border border-white/20 px-5 py-3 min-w-[120px] hover:bg-white/20 transition"
+            >
+              <p className="text-blue-200 text-xs">Demandes actives</p>
+              <p className="text-2xl font-bold mt-1">{activeCount}</p>
+            </Link>
             <Link
               href="/partners"
-              className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-medium shadow-sm hover:bg-slate-800 transition"
+              className="rounded-2xl bg-white/10 backdrop-blur border border-white/20 px-5 py-3 min-w-[120px] hover:bg-white/20 transition"
             >
-              Voir partenaires
+              <p className="text-blue-200 text-xs">À valider</p>
+              <p className="text-2xl font-bold mt-1">{pendingCount}</p>
             </Link>
-            <button
-              onClick={async () => {
-                const next = !soundEnabled;
-                setSoundEnabled(next);
-                if (next && audioRef.current) {
-                  audioRef.current.currentTime = 0;
-                  await audioRef.current.play().catch(() => {});
-                }
-              }}
-              className={`rounded-2xl px-5 py-3 text-sm font-medium shadow-sm transition ${
-                soundEnabled
-                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                  : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              {soundEnabled ? "🔔 Son activé" : "🔕 Son désactivé"}
-            </button>
-          </>
-        }
-      />
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <KpiCard
-          label="Demandes du jour"
-          value={todayCount}
-          active={quickFilters.today}
-          variant="blue"
-          onClick={() => toggleQuickFilter("today")}
-        />
-        <KpiCard
-          label="Urgentes"
-          value={urgentCount}
-          active={quickFilters.urgent}
-          variant="red"
-          valueClassName="text-red-600"
-          onClick={() => toggleQuickFilter("urgent")}
-        />
-        <KpiCard
-          label="En cours"
-          value={inProgressCount}
-          active={quickFilters.inProgress}
-          variant="orange"
-          valueClassName="text-orange-600"
-          onClick={() => toggleQuickFilter("inProgress")}
-        />
-        <KpiCard
-          label="Traitées"
-          value={doneCount}
-          active={quickFilters.done}
-          variant="emerald"
-          valueClassName="text-emerald-600"
-          onClick={() => toggleQuickFilter("done")}
-        />
-      </div>
-
-      <div className="mb-8 rounded-3xl bg-white border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-center">
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
-        >
-          <option value="all">Tous statuts</option>
-          <option value="new">Nouveau</option>
-          <option value="in_progress">En cours</option>
-          <option value="done">Traité</option>
-        </select>
-
-        <select
-          value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
-        >
-          <option value="all">Toutes catégories</option>
-          <option value="transport">Transport</option>
-          <option value="commerce">Commerce</option>
-          <option value="service_local">Service local</option>
-          <option value="mairie">Mairie</option>
-        </select>
-
-        <CommuneFilter value={communeFilter} onChange={setCommuneFilter} />
-
-        <button
-          onClick={resetFilters}
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Réinitialiser
-        </button>
-
-        <div className="md:ml-auto text-sm text-slate-500">
-          {filteredRequests.length} demande
-          {filteredRequests.length > 1 ? "s" : ""} affichée
-          {filteredRequests.length > 1 ? "s" : ""}
+            <div className="rounded-2xl bg-white/10 backdrop-blur border border-white/20 px-5 py-3 min-w-[120px]">
+              <p className="text-blue-200 text-xs">Communes actives</p>
+              <p className="text-2xl font-bold mt-1">{activeCommunes}</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-8">
-        {Object.entries(groupedRequests)
-          .reverse()
-          .map(([dayLabel, dayRequests]) => (
-            <React.Fragment key={dayLabel}>
-              <DayDivider label={dayLabel} />
-              <div className="space-y-4">
-                {dayRequests.map((req) => {
-                  const isMairie = req.category?.trim().toLowerCase() === "mairie";
+      <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Aujourd'hui", value: todayCount },
+          { label: "Nouvelles", value: newCount },
+          { label: "En cours", value: inProgressCount },
+          { label: "Urgentes", value: urgentCount },
+        ].map((kpi) => (
+          <div
+            key={kpi.label}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm"
+          >
+            <p className="text-xs font-medium text-slate-500">{kpi.label}</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{kpi.value}</p>
+          </div>
+        ))}
+      </div>
 
-                  return (
-                  <RequestCard
-                    key={req.id}
-                    request={req}
-                    highlighted={highlightedIds.includes(req.id)}
-                    actions={
-                      <RequestWorkflow
-                        request={req}
-                        variant="admin"
-                        assignMode={isMairie ? "service" : "partner"}
-                        assignOptions={
-                          isMairie
-                            ? MAIRIE_SERVICE_OPTIONS
-                            : matchingPartners(req, partners)
-                        }
-                        selectedAssignId={
-                          isMairie
-                            ? selectedServices[req.id] || req.subtype || ""
-                            : selectedPartners[req.id]
-                        }
-                        onSelectAssign={(value) =>
-                          isMairie
-                            ? setSelectedServices((prev) => ({
-                                ...prev,
-                                [req.id]: value,
-                              }))
-                            : setSelectedPartners((prev) => ({
-                                ...prev,
-                                [req.id]: value,
-                              }))
-                        }
-                        onAssign={() =>
-                          isMairie
-                            ? assignMairieService(req.id)
-                            : assignPartner(req.id)
-                        }
-                        onTake={() => markAsInProgress(req.id)}
-                        onMarkDone={() => markAsDone(req.id)}
-                        onArchive={() => archiveRequest(req.id)}
-                        assignLabel={
-                          isMairie
-                            ? "Assigner à un service municipal"
-                            : "Assigner à un partenaire"
-                        }
-                        assignedLabel={isMairie ? "Service :" : "Assigné à"}
-                      />
-                    }
-                  />
-                  );
-                })}
+      <div className="mb-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6">
+        <AdminCategoryChart stats={categoryStats} activeTotal={activeCount} />
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-3 mb-5">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Réseau partenaires</p>
+              <p className="text-sm text-slate-500 mt-1">
+                {activePartnerCount} validé{activePartnerCount > 1 ? "s" : ""}
+                {pendingCount > 0
+                  ? ` · ${pendingCount} en attente de validation`
+                  : ""}
+              </p>
+            </div>
+            <Link
+              href="/partners"
+              className="rounded-xl bg-orange-600 text-white px-4 py-2 text-sm font-semibold hover:bg-orange-700 transition shrink-0"
+            >
+              Valider
+            </Link>
+          </div>
+
+          {pendingPartners.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+              <p className="text-sm font-medium text-slate-700">
+                Aucun partenaire en attente
+              </p>
+              <p className="text-xs text-slate-500 mt-2">
+                Les nouvelles inscriptions apparaîtront ici.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingPartners.map((partner) => (
+                <Link
+                  key={partner.id}
+                  href="/partners"
+                  className="block rounded-2xl border border-orange-200 bg-orange-50/60 hover:bg-orange-50 px-4 py-3 transition"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{partner.name}</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {partner.commune_name || "Commune non renseignée"}
+                      </p>
+                    </div>
+                    <CategoryBadge
+                      category={partner.category}
+                      subtype={partner.subtype}
+                    />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">À traiter en priorité</h2>
+          <p className="text-sm text-slate-500">
+            {priorityRequests.length} demande
+            {priorityRequests.length > 1 ? "s" : ""} nécessitant une action
+          </p>
+        </div>
+        <Link
+          href="/demandes"
+          className="rounded-xl bg-slate-950 text-white px-4 py-2.5 text-sm font-semibold hover:bg-slate-800 transition"
+        >
+          Ouvrir la file opérationnelle
+        </Link>
+      </div>
+
+      <div className="space-y-3">
+        {priorityRequests.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center">
+            <p className="text-sm font-medium text-slate-700">
+              Aucune demande en attente
+            </p>
+          </div>
+        ) : (
+          priorityRequests.map((req) => (
+            <Link
+              key={req.id}
+              href="/demandes"
+              className="block rounded-2xl border border-slate-200 bg-white hover:border-blue-200 px-5 py-4 shadow-sm transition"
+            >
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <StatusBadge status={req.status} />
+                    <CategoryBadge category={req.category} subtype={req.subtype} />
+                    {isUrgentRequest(req) && (
+                      <span className="text-xs font-bold px-2 py-1 rounded-full bg-red-100 text-red-700">
+                        URGENT
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-800 line-clamp-2">
+                    {req.transcription}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-2">
+                    {formatDayLabel(req.created_at)}
+                    {req.commune_name ? ` · ${req.commune_name}` : ""}
+                  </p>
+                </div>
+                <span className="text-sm font-semibold text-blue-700 shrink-0">
+                  Traiter →
+                </span>
               </div>
-            </React.Fragment>
-          ))}
+            </Link>
+          ))
+        )}
       </div>
     </AuthenticatedShell>
   );
