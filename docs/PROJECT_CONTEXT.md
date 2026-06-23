@@ -165,6 +165,22 @@ Sous-types :
 
 * fleuriste
 * boucher
+* boulanger
+* epicerie
+* superette
+* pharmacie
+* fromager
+* poissonnier
+* restaurant
+* cafe_bar
+* coiffeur
+* tabac_presse
+* librairie_papeterie
+* quincaillerie
+* vetement
+* animalerie
+* optique
+* autre
 
 ## service_local
 
@@ -175,6 +191,7 @@ Sous-types :
 * maçon
 * pisciniste
 * petits_travaux
+* autre
 
 ## transport
 
@@ -186,7 +203,19 @@ Sous-types :
 
 Sous-types :
 
-* mairie
+* voirie
+* eclairage
+* proprete
+* espaces_verts
+* eau_assainissement
+* administratif
+* urbanisme
+* ecole_enfance
+* sport_culture
+* nuisances
+* renseignement
+* mairie (legacy, demande non précisée)
+* autre
 
 ---
 

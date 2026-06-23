@@ -19,6 +19,13 @@ from auth import (
     verify_partner_token,
 )
 from db import get_db_connection
+from taxonomy import (
+    ALLOWED_CATEGORIES,
+    ALLOWED_SUBTYPES,
+    build_subtype_classification_prompt,
+    normalize_subtype,
+    validate_category_subtype,
+)
 
 
 # =========================
@@ -60,35 +67,6 @@ class PartnerUpdate(BaseModel):
     category: Optional[str] = None
     subtype: Optional[str] = None
     address: Optional[str] = None
-
-
-ALLOWED_CATEGORIES = ["commerce", "service_local", "transport", "mairie"]
-
-ALLOWED_SUBTYPES = {
-    "commerce": ["fleuriste", "boucher"],
-    "service_local": [
-        "plombier",
-        "electricien",
-        "maçon",
-        "pisciniste",
-        "petits_travaux",
-    ],
-    "transport": ["taxi"],
-    "mairie": ["mairie"],
-}
-
-
-def validate_category_subtype(category: str, subtype: str):
-    category = category.strip().lower()
-    subtype = subtype.strip().lower()
-
-    if category not in ALLOWED_CATEGORIES:
-        return False, "invalid_category"
-
-    if subtype not in ALLOWED_SUBTYPES.get(category, []):
-        return False, "invalid_subtype"
-
-    return True, None
 
 
 # =========================
@@ -153,10 +131,10 @@ def classify_category(message_text: str):
         model="gpt-4o-mini",
         input=f"""
 Classe cette demande dans UNE seule catégorie parmi :
-- transport : déplacement, taxi, trajet
-- commerce : achat d’un produit ou rdv commerce
-- service_local : prestation d’un professionnel, artisan, travaux, réparation
-- mairie : demande administrative, information ou problème dans la commune
+- transport : déplacement, taxi, VTC, trajet
+- commerce : achat d'un produit, commande ou rendez-vous chez un commerçant local
+- service_local : prestation d'un professionnel, artisan, travaux, réparation à domicile
+- mairie : problème sur la voie publique, service public, demande administrative ou signalement communal
 - autre
 
 Demande : {message_text}
@@ -168,35 +146,20 @@ Réponds uniquement par le nom exact de la catégorie.
 
 
 def classify_subtype(category: str, message_text: str):
+    prompt = build_subtype_classification_prompt(category, message_text)
+
+    if category.strip().lower() == "transport":
+        return "taxi"
+
+    if prompt == "autre":
+        return "autre"
+
     result = client.responses.create(
         model="gpt-4o-mini",
-        input=f"""
-Tu dois extraire un sous-type précis à partir de la demande.
-
-Si category = commerce, réponds par un seul mot parmi :
-- fleuriste
-- boucher
-- autre
-
-Si category = service_local, réponds par un seul mot parmi :
-- plombier
-- electricien
-- maçon
-- pisciniste
-- petits_travaux
-- autre
-
-Si category = transport, réponds : taxi
-Si category = mairie, réponds : mairie
-Sinon réponds : autre
-
-Category : {category}
-Demande : {message_text}
-
-Réponds uniquement par le sous-type exact.
-"""
+        input=prompt,
     )
-    return result.output_text.strip().lower()
+    raw = result.output_text.strip().lower()
+    return normalize_subtype(category, raw)
 
 
 def extract_client_info(message_text: str):
@@ -664,7 +627,7 @@ def create_partner_application(partner: PartnerCreate):
     allowed_subtypes = ALLOWED_SUBTYPES
 
     category = partner.category.strip().lower()
-    subtype = partner.subtype.strip().lower()
+    subtype = normalize_subtype(category, partner.subtype.strip().lower())
 
     if category not in allowed_categories:
         return {"ok": False, "error": "invalid_category"}
@@ -958,7 +921,7 @@ def update_partner(partner_id: int, payload: PartnerUpdate, _admin=Depends(requi
                 else existing["category"]
             )
             subtype = (
-                payload.subtype.strip().lower()
+                normalize_subtype(category, payload.subtype.strip().lower())
                 if payload.subtype is not None
                 else existing["subtype"]
             )

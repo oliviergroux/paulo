@@ -1,4 +1,5 @@
 import { getCategoryClass } from "@/lib/format";
+import { CATEGORY_LABELS, subtypeLabel } from "@/lib/taxonomy";
 
 type CategoryBadgeProps = {
   category: string;
@@ -11,10 +12,10 @@ export default function CategoryBadge({ category, subtype }: CategoryBadgeProps)
       <span
         className={`text-xs font-semibold px-3 py-1 rounded-full ${getCategoryClass(category)}`}
       >
-        {category}
+        {CATEGORY_LABELS[category] || category}
       </span>
       <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-700">
-        {subtype || "autre"}
+        {subtypeLabel(subtype || "autre")}
       </span>
     </>
   );

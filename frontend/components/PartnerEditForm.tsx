@@ -2,19 +2,7 @@
 
 import { useState } from "react";
 import type { PartnerDetail } from "@/lib/types";
-
-const SUBTYPES: Record<string, string[]> = {
-  commerce: ["fleuriste", "boucher"],
-  service_local: [
-    "plombier",
-    "electricien",
-    "maçon",
-    "pisciniste",
-    "petits_travaux",
-  ],
-  transport: ["taxi"],
-  mairie: ["mairie"],
-};
+import { SUBTYPES, subtypeLabel } from "@/lib/taxonomy";
 
 type PartnerEditFormProps = {
   partner: PartnerDetail;
@@ -127,7 +115,7 @@ export default function PartnerEditForm({
           <option value="">Sous-type</option>
           {subtypes.map((st) => (
             <option key={st} value={st}>
-              {st}
+              {subtypeLabel(st)}
             </option>
           ))}
         </select>

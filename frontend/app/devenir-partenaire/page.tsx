@@ -2,22 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { SUBTYPES, subtypeLabel } from "@/lib/taxonomy";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://paulo-teal-nine.vercel.app";
-
-const SUBTYPES = {
-  commerce: ["fleuriste", "boucher"],
-  service_local: [
-    "maçon",
-    "pisciniste",
-    "electricien",
-    "plombier",
-    "petits_travaux",
-  ],
-  transport: ["taxi"],
-  mairie: ["mairie"],
-};
 
 const PROFILE_COPY = {
   commerce: {
@@ -361,7 +349,7 @@ export default function BecomePartnerPage() {
                 <option value="">Choisir un sous-type</option>
                 {availableSubtypes.map((subtype) => (
                   <option key={subtype} value={subtype}>
-                    {subtype.replace("_", " ")}
+                    {subtypeLabel(subtype)}
                   </option>
                 ))}
               </select>
