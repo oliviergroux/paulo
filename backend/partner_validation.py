@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import unicodedata
 from typing import Any, Literal, Optional
 
 import requests
@@ -183,6 +184,196 @@ def _build_subtype_context(category: str) -> str:
     return ", ".join(f"{subtype} ({subtype_label(subtype)})" for subtype in subtypes)
 
 
+NAME_STOP_WORDS = {
+    "sarl",
+    "sas",
+    "eurl",
+    "sa",
+    "sci",
+    "sasu",
+    "eirl",
+    "ei",
+    "et",
+    "de",
+    "la",
+    "le",
+    "les",
+    "du",
+    "des",
+    "l",
+    "d",
+}
+
+
+def normalize_business_name(value: str) -> str:
+    text = (value or "").lower().strip()
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(char for char in text if unicodedata.category(char) != "Mn")
+    text = text.replace("'", " ").replace("-", " ")
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def business_name_tokens(value: str) -> list[str]:
+    return [
+        token
+        for token in normalize_business_name(value).split()
+        if len(token) >= 2 and token not in NAME_STOP_WORDS
+    ]
+
+
+def declared_name_matches_official(declared: str, official: str) -> bool:
+    declared_norm = normalize_business_name(declared)
+    official_norm = normalize_business_name(official)
+
+    if not declared_norm or not official_norm:
+        return False
+
+    if declared_norm == official_norm:
+        return True
+
+    if declared_norm in official_norm or official_norm in declared_norm:
+        return True
+
+    declared_tokens = business_name_tokens(declared)
+    official_tokens = set(business_name_tokens(official))
+
+    if not declared_tokens:
+        return False
+
+    if all(token in official_tokens for token in declared_tokens):
+        return True
+
+    significant = [token for token in declared_tokens if len(token) >= 4]
+    return bool(significant) and all(token in official_tokens for token in significant)
+
+
+def postal_codes_match(partner: dict[str, Any], sirene: dict[str, Any]) -> bool:
+    partner_postal = re.sub(r"\D", "", partner.get("postal_code") or "")
+    sirene_postal = re.sub(r"\D", "", sirene.get("code_postal") or "")
+    if len(partner_postal) != 5:
+        return extract_postal_code(partner.get("address") or "") == sirene_postal
+    return partner_postal == sirene_postal
+
+
+def extract_postal_code(text: str) -> Optional[str]:
+    if not text:
+        return None
+    match = re.search(r"\b(\d{5})\b", text)
+    return match.group(1) if match else None
+
+
+def cities_match_loosely(partner: dict[str, Any], sirene: dict[str, Any]) -> bool:
+    partner_city = normalize_business_name(partner.get("city") or "").replace(" ", "")
+    sirene_city = normalize_business_name(sirene.get("commune") or "").replace(" ", "")
+
+    if not partner_city or not sirene_city:
+        return True
+
+    return partner_city in sirene_city or sirene_city in partner_city
+
+
+def naf_check_passed(ai_report: dict[str, Any]) -> bool:
+    for check in ai_report.get("checks") or []:
+        label = f"{check.get('id', '')} {check.get('label', '')}".lower()
+        if any(keyword in label for keyword in ("naf", "activité", "activite", "activity")):
+            return bool(check.get("ok"))
+
+    return ai_report.get("recommendation") == "approve"
+
+
+def name_check_only_failure(ai_report: dict[str, Any]) -> bool:
+    failed_checks = [
+        check for check in (ai_report.get("checks") or []) if not check.get("ok")
+    ]
+
+    if not failed_checks:
+        return False
+
+    return all(
+        any(
+            keyword in f"{check.get('id', '')} {check.get('label', '')}".lower()
+            for keyword in ("nom", "name", "enseigne", "raison", "commercial")
+        )
+        for check in failed_checks
+    )
+
+
+def hard_facts_support_auto_approve(
+    partner: dict[str, Any],
+    sirene: Optional[dict[str, Any]],
+    ai_report: dict[str, Any],
+) -> bool:
+    if not sirene or not sirene.get("found"):
+        return False
+
+    if sirene.get("etat_administratif") != "A":
+        return False
+
+    if not sirene.get("siret_exact_match") or sirene.get("input_kind") != "siret":
+        return False
+
+    if ai_report.get("recommendation") == "reject":
+        return False
+
+    if not postal_codes_match(partner, sirene):
+        return False
+
+    if not cities_match_loosely(partner, sirene):
+        return False
+
+    if not declared_name_matches_official(
+        partner.get("name") or "",
+        sirene.get("company_name") or "",
+    ):
+        return False
+
+    if not naf_check_passed(ai_report):
+        return False
+
+    return True
+
+
+def maybe_boost_ai_report_for_trade_name(
+    partner: dict[str, Any],
+    sirene: Optional[dict[str, Any]],
+    ai_report: dict[str, Any],
+) -> dict[str, Any]:
+    if not hard_facts_support_auto_approve(partner, sirene, ai_report):
+        if (
+            sirene
+            and sirene.get("found")
+            and declared_name_matches_official(
+                partner.get("name") or "",
+                sirene.get("company_name") or "",
+            )
+            and name_check_only_failure(ai_report)
+            and naf_check_passed(ai_report)
+            and ai_report.get("recommendation") != "reject"
+        ):
+            boosted = dict(ai_report)
+            boosted["auto_approve"] = True
+            boosted["recommendation"] = "approve"
+            boosted["confidence"] = max(float(ai_report.get("confidence") or 0), 0.99)
+            boosted["summary"] = (
+                ai_report.get("summary")
+                or "Enseigne raccourcie cohérente avec la raison sociale SIRENE ; SIRET, adresse et activité validés."
+            )
+            return boosted
+        return ai_report
+
+    boosted = dict(ai_report)
+    boosted["auto_approve"] = True
+    boosted["recommendation"] = "approve"
+    boosted["confidence"] = max(float(ai_report.get("confidence") or 0), 0.99)
+    if not boosted.get("summary"):
+        boosted["summary"] = (
+            "SIRET actif, adresse et activité cohérents. "
+            "Le nom déclaré correspond à l'enseigne ou à un extrait du nom officiel."
+        )
+    return boosted
+
+
 def analyze_partner_with_ai(
     partner: dict[str, Any],
     sirene: Optional[dict[str, Any]],
@@ -214,10 +405,14 @@ Données SIRENE :
 Règles :
 1. L'entreprise doit exister dans SIRENE et l'établissement retenu doit être actif (etat_administratif = A).
 2. Si seul un SIREN (9 chiffres) a été fourni, la comparaison se fait avec le siège social — c'est acceptable mais ne force pas auto_approve.
-3. Le nom déclaré doit correspondre raisonnablement au nom officiel (enseigne ou raison sociale).
+3. Nom / enseigne : les commerçants et artisans utilisent souvent une enseigne courte ou commerciale différente de la raison sociale complète.
+   - Exemples VALIDES : déclaré "L'Ardéchoise" / officiel "BOUCHERIE CHARCUTERIE L'ARDÉCHOISE" ; déclaré "Plomberie Martin" / officiel "MARTIN PLOMBERIE SARL".
+   - Considère OK si le nom déclaré est contenu dans le nom officiel, si tous les mots significatifs du nom déclaré apparaissent dans le nom officiel, ou s'il s'agit clairement de la même enseigne.
+   - Ne mets PAS en review uniquement pour une différence enseigne vs raison sociale si SIRET exact, adresse/CP/ville cohérents et NAF compatible.
+   - Bloque seulement si le nom déclaré n'a aucun lien crédible avec le nom officiel (fraude évidente).
 4. L'adresse déclarée doit être cohérente avec l'adresse SIRENE (même commune / CP acceptable).
 5. Le code NAF / activité doit être compatible avec le sous-type Paulo déclaré.
-6. Le téléphone n'est pas vérifiable via SIRENE — ne bloque pas une validation auto si le reste est parfait.
+6. Le téléphone et l'email ne sont pas vérifiables via SIRENE — ne bloquent jamais une validation auto si le reste est solide.
 
 Réponds UNIQUEMENT en JSON valide avec cette structure :
 {{
@@ -235,7 +430,8 @@ Réponds UNIQUEMENT en JSON valide avec cette structure :
   ]
 }}
 
-auto_approve = true UNIQUEMENT si tu es certain à 100% (confidence >= 0.99) ET établissement actif ET SIRET exact fourni (input_kind = siret) ET nom/adresse/activité cohérents.
+auto_approve = true si tu es certain (confidence >= 0.99) ET établissement actif ET SIRET exact fourni (input_kind = siret) ET adresse/CP/ville cohérents ET NAF compatible ET le nom déclaré est une enseigne valide (même courte) du nom officiel.
+Ne mets recommendation = review QUE si un doute réel subsiste (SIRET, adresse, NAF ou nom sans lien crédible).
 Sinon recommendation = review sauf fraude évidente (reject).
 """
 
@@ -321,6 +517,7 @@ def resolve_validation_outcome(
 def validate_partner_application(partner: dict[str, Any]) -> dict[str, Any]:
     sirene = lookup_siret(partner.get("siret", ""))
     ai_report = analyze_partner_with_ai(partner, sirene)
+    ai_report = maybe_boost_ai_report_for_trade_name(partner, sirene, ai_report)
     outcome = resolve_validation_outcome(ai_report, sirene)
 
     return {
