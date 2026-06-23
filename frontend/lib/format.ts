@@ -78,3 +78,30 @@ export function displayClientName(
   const name = [firstName, lastName].filter(Boolean).join(" ");
   return name || "Client sans nom";
 }
+
+export function averageHandlingHours(requests: RequestItem[]): number | null {
+  const done = requests.filter((r) => r.status === "done" && r.handled_at);
+  if (done.length === 0) return null;
+
+  const totalMs = done.reduce((sum, request) => {
+    const created = new Date(request.created_at + "Z").getTime();
+    const handled = new Date(request.handled_at! + "Z").getTime();
+    return sum + (handled - created);
+  }, 0);
+
+  return totalMs / done.length / (1000 * 60 * 60);
+}
+
+export function formatHours(value: number | null): string {
+  if (value === null) return "—";
+  if (value < 1) return `${Math.round(value * 60)} min`;
+  if (value < 24) return `${Math.round(value)} h`;
+
+  const days = Math.floor(value / 24);
+  const hours = Math.round(value % 24);
+  return hours > 0 ? `${days}j ${hours}h` : `${days}j`;
+}
+
+export function isMairieRequest(req: Pick<RequestItem, "category">): boolean {
+  return req.category?.trim().toLowerCase() === "mairie";
+}

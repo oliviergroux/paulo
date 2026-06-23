@@ -15,6 +15,7 @@ type AppShellProps = {
 
 const NAV_ITEMS: { id: AdminNav; href: string; label: string }[] = [
   { id: "dashboard", href: "/", label: "Dashboard" },
+  { id: "mairie", href: "/mairie", label: "Mairie" },
   { id: "partners", href: "/partners", label: "Partenaires" },
   { id: "clients", href: "/clients", label: "Clients" },
 ];

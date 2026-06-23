@@ -44,4 +44,4 @@ export type ClientItem = {
   last_request_at?: string | null;
 };
 
-export type AdminNav = "dashboard" | "partners" | "clients";
+export type AdminNav = "dashboard" | "mairie" | "partners" | "clients";
