@@ -52,4 +52,9 @@ export type ClientItem = {
 
 export type UserRole = "admin" | "mairie";
 
-export type AdminNav = "dashboard" | "mairie" | "partners" | "clients";
+export type AdminNav =
+  | "dashboard"
+  | "mairie"
+  | "mairie_archives"
+  | "partners"
+  | "clients";

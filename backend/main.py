@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Body
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Body
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -383,10 +383,11 @@ async def whatsapp_inbound(request: Request):
 # =========================
 
 @app.get("/requests")
-def get_requests(_admin=Depends(require_admin)):
+def get_requests(archived: bool = Query(False), _admin=Depends(require_admin)):
+    order = "DESC" if archived else "ASC"
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT 
                     r.id,
                     r.phone,
@@ -407,9 +408,9 @@ def get_requests(_admin=Depends(require_admin)):
                 FROM requests r
                 LEFT JOIN partners p ON r.assigned_partner_id = p.id
                 LEFT JOIN clients c ON r.client_id = c.id
-                WHERE r.archived = false
-                ORDER BY r.created_at ASC
-            """)
+                WHERE r.archived = %s
+                ORDER BY r.created_at {order}
+            """, (archived,))
             rows = cur.fetchall()
 
     return rows

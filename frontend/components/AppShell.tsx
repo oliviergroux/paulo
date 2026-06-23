@@ -11,7 +11,7 @@ type AppShellProps = {
     description: string;
   };
   children: React.ReactNode;
-  maxWidth?: "6xl" | "7xl";
+  maxWidth?: "6xl" | "7xl" | "full";
 };
 
 const ADMIN_NAV: { id: AdminNav; href: string; label: string }[] = [
@@ -22,7 +22,8 @@ const ADMIN_NAV: { id: AdminNav; href: string; label: string }[] = [
 ];
 
 const MAIRIE_NAV: { id: AdminNav; href: string; label: string }[] = [
-  { id: "mairie", href: "/mairie", label: "Demandes mairie" },
+  { id: "mairie", href: "/mairie", label: "Demandes actives" },
+  { id: "mairie_archives", href: "/mairie/archives", label: "Archives" },
   { id: "clients", href: "/clients", label: "Habitants" },
 ];
 
@@ -40,7 +41,12 @@ export default function AppShell({
 }: AppShellProps) {
   const isMairie = role === "mairie";
   const navItems = isMairie ? MAIRIE_NAV : ADMIN_NAV;
-  const maxWidthClass = maxWidth === "6xl" ? "max-w-6xl" : "max-w-7xl";
+  const maxWidthClass =
+    maxWidth === "full"
+      ? "max-w-[1800px]"
+      : maxWidth === "6xl"
+      ? "max-w-6xl"
+      : "max-w-7xl";
   const logoClass = isMairie ? "bg-violet-600" : "bg-blue-500";
   const roleLabel = isMairie ? "Espace mairie" : "Administration";
 

@@ -1,15 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import AuthenticatedShell from "@/components/AuthenticatedShell";
-import DayDivider from "@/components/DayDivider";
-import EmptyState from "@/components/EmptyState";
-import KpiCard from "@/components/KpiCard";
+import MairieKanbanBoard from "@/components/MairieKanbanBoard";
 import MairieTopicChart from "@/components/MairieTopicChart";
-import PageHeader from "@/components/PageHeader";
-import RequestCard from "@/components/RequestCard";
-import RequestWorkflow from "@/components/RequestWorkflow";
 import { mairieFetch } from "@/lib/api";
 import {
   averageHandlingHours,
@@ -17,113 +12,69 @@ import {
   formatHours,
   isMairieRequest,
 } from "@/lib/format";
-import { MAIRIE_SERVICES, mairieServiceOptions } from "@/lib/taxonomy";
 import {
   computeMairieTopicStats,
   countActiveMairieRequests,
   countActiveMairieTopics,
   resolveMairieTopic,
 } from "@/lib/mairie-stats";
+import { MAIRIE_SERVICES, mairieServiceOptions, subtypeLabel } from "@/lib/taxonomy";
 import type { RequestItem } from "@/lib/types";
 
 const SERVICE_OPTIONS = mairieServiceOptions();
 
 export default function MairiePage() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [archivedCount, setArchivedCount] = useState(0);
   const [subtypeFilter, setSubtypeFilter] = useState("all");
   const [highlightedIds, setHighlightedIds] = useState<number[]>([]);
   const [selectedServices, setSelectedServices] = useState<Record<number, string>>({});
-  const [quickFilters, setQuickFilters] = useState({
-    today: false,
-    inProgress: false,
-    done: false,
-    unassigned: false,
-  });
 
   const seenIdsRef = useRef<Set<number>>(new Set());
   const isFirstLoadRef = useRef(true);
 
   const mairieRequests = requests.filter(isMairieRequest);
+  const activeRequests = mairieRequests.filter(
+    (req) => req.status === "new" || req.status === "in_progress"
+  );
   const topicStats = computeMairieTopicStats(mairieRequests);
   const activeMairieCount = countActiveMairieRequests(mairieRequests);
 
-  const handleTopicSelect = (subtype: string) => {
-    setSubtypeFilter((current) => (current === subtype ? "all" : subtype));
-    setStatusFilter("all");
-    setQuickFilters((prev) => ({
-      ...prev,
-      done: false,
-    }));
-  };
-
-  const toggleQuickFilter = (key: keyof typeof quickFilters) => {
-    setQuickFilters((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const resetFilters = () => {
-    setStatusFilter("all");
-    setSubtypeFilter("all");
-    setQuickFilters({
-      today: false,
-      inProgress: false,
-      done: false,
-      unassigned: false,
-    });
-  };
-
-  const todayCount = mairieRequests.filter(
-    (req) => formatDayLabel(req.created_at) === "Aujourd’hui"
-  ).length;
-  const inProgressCount = mairieRequests.filter(
-    (r) => r.status === "in_progress"
-  ).length;
-  const doneCount = mairieRequests.filter((r) => r.status === "done").length;
-  const unassignedCount = mairieRequests.filter(
-    (r) => !r.assigned_service && r.status !== "done"
-  ).length;
-  const uniqueResidents = new Set(mairieRequests.map((r) => r.phone)).size;
-  const avgHours = averageHandlingHours(mairieRequests);
-  const topicCount = countActiveMairieTopics(topicStats);
-
-  const filteredRequests = mairieRequests
-    .filter((req) => (statusFilter === "all" ? true : req.status === statusFilter))
+  const filteredActive = activeRequests
     .filter((req) =>
       subtypeFilter === "all" ? true : resolveMairieTopic(req) === subtypeFilter
     )
-    .filter((req) =>
-      quickFilters.today ? formatDayLabel(req.created_at) === "Aujourd’hui" : true
-    )
-    .filter((req) =>
-      quickFilters.inProgress ? req.status === "in_progress" : true
-    )
-    .filter((req) => (quickFilters.done ? req.status === "done" : true))
-    .filter((req) =>
-      quickFilters.unassigned
-        ? !req.assigned_service && req.status !== "done"
-        : true
-    )
     .sort(
       (a, b) =>
-        new Date(a.created_at + "Z").getTime() -
-        new Date(b.created_at + "Z").getTime()
+        new Date(b.created_at + "Z").getTime() -
+        new Date(a.created_at + "Z").getTime()
     );
 
-  const groupedRequests = filteredRequests.reduce(
-    (acc: Record<string, RequestItem[]>, req) => {
-      const label = formatDayLabel(req.created_at);
-      if (!acc[label]) acc[label] = [];
-      acc[label].push(req);
-      return acc;
-    },
-    {}
+  const newRequests = filteredActive.filter((req) => req.status === "new");
+  const inProgressRequests = filteredActive.filter(
+    (req) => req.status === "in_progress"
   );
 
+  const todayCount = mairieRequests.filter(
+    (req) => formatDayLabel(req.created_at).startsWith("Aujourd")
+  ).length;
+  const unassignedCount = activeRequests.filter(
+    (r) => !r.assigned_service
+  ).length;
+  const avgHours = averageHandlingHours(mairieRequests);
+  const topicCount = countActiveMairieTopics(topicStats);
+
   const fetchRequests = async () => {
-    const res = await mairieFetch("/requests");
-    const data: RequestItem[] = await res.json();
+    const [activeRes, archivedRes] = await Promise.all([
+      mairieFetch("/requests"),
+      mairieFetch("/requests?archived=true"),
+    ]);
+    const data: RequestItem[] = await activeRes.json();
+    const archived: RequestItem[] = await archivedRes.json();
     const mairieData = data.filter(isMairieRequest);
     const currentIds = new Set(mairieData.map((req) => req.id));
+
+    setArchivedCount(archived.filter(isMairieRequest).length);
 
     if (isFirstLoadRef.current) {
       seenIdsRef.current = currentIds;
@@ -149,21 +100,25 @@ export default function MairiePage() {
     setRequests(data);
   };
 
-  const markAsDone = async (id: number) => {
-    await mairieFetch(`/requests/${id}/status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify("done"),
-    });
-    fetchRequests();
-  };
-
   const markAsInProgress = async (id: number) => {
     await mairieFetch(`/requests/${id}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify("in_progress"),
     });
+    fetchRequests();
+  };
+
+  const markAsDone = async (id: number) => {
+    await mairieFetch(`/requests/${id}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify("done"),
+    });
+  };
+
+  const archiveRequest = async (id: number) => {
+    await mairieFetch(`/requests/${id}/archive`, { method: "POST" });
     fetchRequests();
   };
 
@@ -179,9 +134,8 @@ export default function MairiePage() {
     fetchRequests();
   };
 
-  const archiveRequest = async (requestId: number) => {
-    await mairieFetch(`/requests/${requestId}/archive`, { method: "POST" });
-    fetchRequests();
+  const handleTopicSelect = (subtype: string) => {
+    setSubtypeFilter((current) => (current === subtype ? "all" : subtype));
   };
 
   useEffect(() => {
@@ -193,189 +147,153 @@ export default function MairiePage() {
   return (
     <AuthenticatedShell
       activeNav="mairie"
+      maxWidth="full"
       sidebarNote={{
-        title: "Espace collectivité",
-        description:
-          "Demandes administratives et signalements des habitants.",
+        title: "Pilotage territorial",
+        description: "Signalements et demandes administratives en temps réel.",
       }}
     >
-      <PageHeader
-        eyebrow="Vue mairie"
-        title="Demandes territoriales"
-        description="Signalements, informations et demandes administratives classées mairie."
-        actions={
-          <>
+      <div className="mb-8 rounded-[32px] bg-gradient-to-br from-violet-700 via-violet-600 to-indigo-700 text-white p-6 md:p-8 shadow-lg shadow-violet-200/50">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+          <div>
+            <p className="text-violet-200 text-sm font-medium tracking-wide uppercase">
+              Espace collectivité
+            </p>
+            <h1 className="text-3xl md:text-4xl font-bold mt-2 tracking-tight">
+              Tableau de bord mairie
+            </h1>
+            <p className="text-violet-100/90 mt-2 max-w-xl text-sm md:text-base">
+              Suivez les signalements habitants, assignez-les aux services
+              municipaux et clôturez les dossiers en un clic.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <div className="rounded-2xl bg-white/10 backdrop-blur border border-white/20 px-5 py-3 min-w-[120px]">
+              <p className="text-violet-200 text-xs">Actives</p>
+              <p className="text-2xl font-bold mt-1">{activeMairieCount}</p>
+            </div>
             <Link
-              href="/clients"
-              className="rounded-2xl bg-violet-600 text-white px-5 py-3 text-sm font-medium shadow-sm hover:bg-violet-700 transition"
+              href="/mairie/archives"
+              className="rounded-2xl bg-white/10 backdrop-blur border border-white/20 px-5 py-3 min-w-[120px] hover:bg-white/20 transition"
             >
-              Voir habitants
+              <p className="text-violet-200 text-xs">Archives</p>
+              <p className="text-2xl font-bold mt-1">{archivedCount}</p>
             </Link>
-          </>
-        }
-      />
-
-      <div className="mb-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard
-          label="Demandes du jour"
-          value={todayCount}
-          active={quickFilters.today}
-          variant="blue"
-          onClick={() => toggleQuickFilter("today")}
-        />
-        <KpiCard
-          label="En cours"
-          value={inProgressCount}
-          active={quickFilters.inProgress}
-          variant="orange"
-          valueClassName="text-orange-600"
-          onClick={() => toggleQuickFilter("inProgress")}
-        />
-        <KpiCard
-          label="Traitées"
-          value={doneCount}
-          active={quickFilters.done}
-          variant="emerald"
-          valueClassName="text-emerald-600"
-          onClick={() => toggleQuickFilter("done")}
-        />
-        <KpiCard
-          label="Délai moyen"
-          value={formatHours(avgHours)}
-          variant="default"
-          valueClassName="text-violet-700"
-        />
+            <div className="rounded-2xl bg-white/10 backdrop-blur border border-white/20 px-5 py-3 min-w-[120px]">
+              <p className="text-violet-200 text-xs">Délai moyen</p>
+              <p className="text-2xl font-bold mt-1">{formatHours(avgHours)}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-3xl border border-violet-200 bg-violet-50 p-5 shadow-sm">
-          <p className="text-sm text-violet-700">Non assignées</p>
-          <button
-            type="button"
-            onClick={() => toggleQuickFilter("unassigned")}
-            className="text-left w-full"
+      <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Aujourd'hui", value: todayCount },
+          { label: "Nouvelles", value: newRequests.length },
+          { label: "En cours", value: inProgressRequests.length },
+          { label: "Non assignées", value: unassignedCount },
+        ].map((kpi) => (
+          <div
+            key={kpi.label}
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm"
           >
-            <p className="text-3xl font-bold mt-2 text-violet-900">
-              {unassignedCount}
-            </p>
-            <p className="text-xs text-violet-600 mt-1">
-              Sans service municipal désigné
-            </p>
-          </button>
-        </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Habitants concernés</p>
-          <p className="text-3xl font-bold mt-2 text-slate-950">
-            {uniqueResidents}
-          </p>
-          <p className="text-xs text-slate-400 mt-1">
-            Numéros uniques sur les demandes mairie
-          </p>
-        </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Services actifs</p>
-          <p className="text-3xl font-bold mt-2 text-slate-950">{topicCount}</p>
-          <p className="text-xs text-slate-400 mt-1">
-            Services municipaux concernés (dossiers actifs)
-          </p>
-        </div>
+            <p className="text-xs font-medium text-slate-500">{kpi.label}</p>
+            <p className="text-2xl font-bold text-slate-900 mt-1">{kpi.value}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="mb-8">
+      <div className="mb-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-6">
         <MairieTopicChart
           stats={topicStats}
           activeTotal={activeMairieCount}
           selectedSubtype={subtypeFilter === "all" ? undefined : subtypeFilter}
           onSelectSubtype={handleTopicSelect}
         />
-      </div>
 
-      <div className="mb-8 rounded-3xl bg-white border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-center">
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
-        >
-          <option value="all">Tous statuts</option>
-          <option value="new">Nouveau</option>
-          <option value="in_progress">En cours</option>
-          <option value="done">Traité</option>
-        </select>
-
-        <select
-          value={subtypeFilter}
-          onChange={(e) => setSubtypeFilter(e.target.value)}
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
-        >
-          <option value="all">Tous sujets</option>
-          {MAIRIE_SERVICES.map((service) => (
-            <option key={service} value={service}>
-              {SERVICE_OPTIONS.find((option) => option.id === service)?.label}
-            </option>
-          ))}
-        </select>
-
-        <button
-          onClick={resetFilters}
-          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Réinitialiser
-        </button>
-
-        <div className="md:ml-auto text-sm text-slate-500">
-          {filteredRequests.length} demande
-          {filteredRequests.length > 1 ? "s" : ""} mairie affichée
-          {filteredRequests.length > 1 ? "s" : ""}
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm font-semibold text-slate-900">Vue d'ensemble</p>
+          <p className="text-sm text-slate-500 mt-1 mb-5">
+            {topicCount} service{topicCount > 1 ? "s" : ""} municipal
+            {topicCount > 1 ? "aux" : ""} sollicité{topicCount > 1 ? "s" : ""}
+          </p>
+          <div className="space-y-3">
+            {topicStats.slice(0, 5).map((row) => (
+              <button
+                key={row.subtype}
+                type="button"
+                onClick={() => handleTopicSelect(row.subtype)}
+                className="w-full flex items-center justify-between rounded-xl bg-slate-50 hover:bg-violet-50 px-4 py-3 text-left transition"
+              >
+                <span className="text-sm font-medium text-slate-800">
+                  {row.label}
+                </span>
+                <span className="text-sm font-bold text-violet-700">
+                  {row.activeCount}
+                </span>
+              </button>
+            ))}
+            {topicStats.length === 0 && (
+              <p className="text-sm text-slate-500">Aucun dossier actif.</p>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="space-y-8">
-        {Object.keys(groupedRequests).length === 0 && (
-          <EmptyState message="Aucune demande mairie pour ces filtres." />
-        )}
+      <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">File de traitement</h2>
+          <p className="text-sm text-slate-500">
+            {filteredActive.length} dossier{filteredActive.length > 1 ? "s" : ""}{" "}
+            actif{filteredActive.length > 1 ? "s" : ""}
+            {subtypeFilter !== "all"
+              ? ` · ${subtypeLabel(subtypeFilter)}`
+              : ""}
+          </p>
+        </div>
 
-        {Object.entries(groupedRequests)
-          .reverse()
-          .map(([dayLabel, dayRequests]) => (
-            <React.Fragment key={dayLabel}>
-              <DayDivider label={dayLabel} />
-              <div className="space-y-4">
-                {dayRequests.map((req) => (
-                  <RequestCard
-                    key={req.id}
-                    request={req}
-                    highlighted={highlightedIds.includes(req.id)}
-                    actions={
-                      <RequestWorkflow
-                        request={req}
-                        variant="mairie"
-                        assignMode="service"
-                        assignOptions={SERVICE_OPTIONS}
-                        selectedAssignId={
-                          selectedServices[req.id] || resolveMairieTopic(req)
-                        }
-                        onSelectAssign={(serviceId) =>
-                          setSelectedServices((prev) => ({
-                            ...prev,
-                            [req.id]: serviceId,
-                          }))
-                        }
-                        onAssign={() => assignService(req.id)}
-                        onTake={() => markAsInProgress(req.id)}
-                        onMarkDone={() => markAsDone(req.id)}
-                        onArchive={() => archiveRequest(req.id)}
-                        assignLabel="Assigner à un service municipal"
-                        assignedLabel="Service :"
-                      />
-                    }
-                  />
-                ))}
-              </div>
-            </React.Fragment>
-          ))}
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={subtypeFilter}
+            onChange={(e) => setSubtypeFilter(e.target.value)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+          >
+            <option value="all">Tous les services</option>
+            {MAIRIE_SERVICES.map((service) => (
+              <option key={service} value={service}>
+                {subtypeLabel(service)}
+              </option>
+            ))}
+          </select>
+          {subtypeFilter !== "all" && (
+            <button
+              type="button"
+              onClick={() => setSubtypeFilter("all")}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Effacer filtre
+            </button>
+          )}
+        </div>
       </div>
+
+      <MairieKanbanBoard
+        newRequests={newRequests}
+        inProgressRequests={inProgressRequests}
+        highlightedIds={highlightedIds}
+        assignOptions={SERVICE_OPTIONS}
+        selectedServices={selectedServices}
+        onSelectService={(requestId, serviceId) =>
+          setSelectedServices((prev) => ({ ...prev, [requestId]: serviceId }))
+        }
+        onAssign={assignService}
+        onTake={markAsInProgress}
+        onMarkDone={markAsDone}
+        onArchive={archiveRequest}
+        resolveDefaultService={resolveMairieTopic}
+      />
     </AuthenticatedShell>
   );
 }

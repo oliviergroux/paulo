@@ -21,6 +21,9 @@ type RequestWorkflowProps = {
   assignedLabel?: string;
   showAssign?: boolean;
   showArchive?: boolean;
+  autoArchiveOnDone?: boolean;
+  doneLabel?: string;
+  compact?: boolean;
 };
 
 const STEPS = [
@@ -77,6 +80,9 @@ export default function RequestWorkflow({
   assignedLabel = "Assigné à",
   showAssign = true,
   showArchive = true,
+  autoArchiveOnDone = false,
+  doneLabel = "Marquer comme traité",
+  compact = false,
 }: RequestWorkflowProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const styles = VARIANT_STYLES[variant];
@@ -96,7 +102,8 @@ export default function RequestWorkflow({
   };
 
   return (
-    <div className="space-y-5">
+    <div className={compact ? "space-y-3" : "space-y-5"}>
+      {!compact && (
       <div>
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
           Progression
@@ -140,6 +147,7 @@ export default function RequestWorkflow({
           })}
         </div>
       </div>
+      )}
 
       {serviceMode && request.assigned_service && (
         <div
@@ -161,7 +169,7 @@ export default function RequestWorkflow({
 
       <div className="space-y-2">
         {request.status === "done" ? (
-          showArchive ? (
+          showArchive && !autoArchiveOnDone ? (
             <button
               type="button"
               disabled={busy !== null}
@@ -177,10 +185,25 @@ export default function RequestWorkflow({
           <button
             type="button"
             disabled={busy !== null}
-            onClick={() => run("done", onMarkDone)}
-            className="w-full rounded-2xl bg-slate-950 hover:bg-slate-800 text-white px-4 py-3 text-sm font-semibold transition disabled:opacity-60"
+            onClick={() =>
+              run("done", async () => {
+                await onMarkDone();
+                if (autoArchiveOnDone) {
+                  await onArchive();
+                }
+              })
+            }
+            className={`w-full rounded-2xl px-4 py-3 text-sm font-semibold transition disabled:opacity-60 ${
+              autoArchiveOnDone
+                ? `${styles.accent} ${styles.accentHover} text-white`
+                : "bg-slate-950 hover:bg-slate-800 text-white"
+            }`}
           >
-            {busy === "done" ? "Mise à jour..." : "Marquer comme traité"}
+            {busy === "done"
+              ? "Clôture..."
+              : autoArchiveOnDone
+              ? doneLabel
+              : "Marquer comme traité"}
           </button>
         ) : (
           <button

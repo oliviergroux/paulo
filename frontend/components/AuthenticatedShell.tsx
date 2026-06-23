@@ -11,7 +11,7 @@ type AuthenticatedShellProps = {
     description: string;
   };
   children: React.ReactNode;
-  maxWidth?: "6xl" | "7xl";
+  maxWidth?: "6xl" | "7xl" | "full";
 };
 
 export default function AuthenticatedShell({
