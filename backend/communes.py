@@ -21,7 +21,14 @@ def get_commune_by_id(commune_id: int):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, name, postal_code, department, is_active, created_at
+                SELECT
+                    id,
+                    name,
+                    postal_code,
+                    department_code,
+                    department_label,
+                    is_active,
+                    created_at
                 FROM communes
                 WHERE id = %s
                 """,
@@ -38,7 +45,14 @@ def get_active_commune_by_postal_code(postal_code: str):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT id, name, postal_code, department, is_active, created_at
+                SELECT
+                    id,
+                    name,
+                    postal_code,
+                    department_code,
+                    department_label,
+                    is_active,
+                    created_at
                 FROM communes
                 WHERE postal_code = %s AND is_active = true
                 ORDER BY id ASC
