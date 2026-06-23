@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-import { SESSION_COOKIE, getSessionRole } from "@/lib/auth";
+import { SESSION_COOKIE, getSessionContext } from "@/lib/auth";
 import { getAdminApiKey, getBackendUrl } from "@/lib/backend";
 
 type RouteContext = {
@@ -23,15 +23,15 @@ function isPathAllowedForMairie(method: string, path: string): boolean {
 
 async function proxyMairieRequest(request: NextRequest, pathSegments: string[]) {
   const cookieStore = await cookies();
-  const role = await getSessionRole(cookieStore.get(SESSION_COOKIE)?.value);
+  const session = await getSessionContext(cookieStore.get(SESSION_COOKIE)?.value);
 
-  if (role !== "admin" && role !== "mairie") {
+  if (!session || (session.role !== "admin" && session.role !== "mairie")) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const backendPath = `/${pathSegments.join("/")}`;
 
-  if (role === "mairie" && !isPathAllowedForMairie(request.method, backendPath)) {
+  if (session.role === "mairie" && !isPathAllowedForMairie(request.method, backendPath)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -43,6 +43,10 @@ async function proxyMairieRequest(request: NextRequest, pathSegments: string[]) 
 
   const headers = new Headers();
   headers.set("X-Admin-Key", getAdminApiKey());
+
+  if (session.communeId != null) {
+    headers.set("X-Commune-Id", String(session.communeId));
+  }
 
   const contentType = request.headers.get("content-type");
   if (contentType) {

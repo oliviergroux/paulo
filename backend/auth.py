@@ -64,3 +64,17 @@ def partner_can_update_request(
         return False
 
     return row["assigned_partner_id"] == partner_id
+
+
+def parse_commune_id_header(
+    x_commune_id: Optional[str] = Header(default=None, alias="X-Commune-Id"),
+) -> Optional[int]:
+    if not x_commune_id:
+        return None
+
+    try:
+        commune_id = int(x_commune_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid_commune_id") from exc
+
+    return commune_id

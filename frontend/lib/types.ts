@@ -13,6 +13,8 @@ export type RequestItem = {
   first_name?: string | null;
   last_name?: string | null;
   address?: string | null;
+  commune_id?: number | null;
+  commune_name?: string | null;
 };
 
 export type AssignOption = {
@@ -33,9 +35,23 @@ export type PartnerDetail = PartnerSummary & {
   phone?: string;
   phone_type?: string;
   address?: string;
+  commune_id?: number | null;
+  commune_name?: string | null;
   assigned_requests_count?: number;
   access_token?: string;
   created_at?: string;
+};
+
+export type CommuneItem = {
+  id: number;
+  name: string;
+  postal_code: string;
+  department?: string | null;
+  is_active: boolean;
+  created_at?: string;
+  total_requests?: number;
+  active_requests?: number;
+  partners_count?: number;
 };
 
 export type ClientItem = {
@@ -57,4 +73,5 @@ export type AdminNav =
   | "mairie"
   | "mairie_archives"
   | "partners"
-  | "clients";
+  | "clients"
+  | "communes";

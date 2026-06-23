@@ -8,6 +8,7 @@ import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
 import RequestCard from "@/components/RequestCard";
 import RequestWorkflow, { matchingPartners } from "@/components/RequestWorkflow";
+import CommuneFilter from "@/components/CommuneFilter";
 import { adminFetch } from "@/lib/api";
 import { formatDayLabel, isUrgentRequest } from "@/lib/format";
 import { mairieServiceOptions } from "@/lib/taxonomy";
@@ -20,6 +21,7 @@ export default function Home() {
   const [partners, setPartners] = useState<PartnerSummary[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [communeFilter, setCommuneFilter] = useState<number | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<number[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [selectedPartners, setSelectedPartners] = useState<Record<number, string>>({});
@@ -83,7 +85,8 @@ export default function Home() {
   );
 
   const fetchRequests = async () => {
-    const res = await adminFetch("/requests");
+    const query = communeFilter != null ? `?commune_id=${communeFilter}` : "";
+    const res = await adminFetch(`/requests${query}`);
     const data: RequestItem[] = await res.json();
     const currentIds = new Set(data.map((req) => req.id));
 
@@ -117,7 +120,8 @@ export default function Home() {
   };
 
   const fetchPartners = async () => {
-    const res = await adminFetch("/partners");
+    const query = communeFilter != null ? `?commune_id=${communeFilter}` : "";
+    const res = await adminFetch(`/partners${query}`);
     setPartners(await res.json());
   };
 
@@ -178,7 +182,7 @@ export default function Home() {
     fetchPartners();
     const interval = setInterval(fetchRequests, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [communeFilter]);
 
   return (
     <AuthenticatedShell
@@ -278,6 +282,8 @@ export default function Home() {
           <option value="service_local">Service local</option>
           <option value="mairie">Mairie</option>
         </select>
+
+        <CommuneFilter value={communeFilter} onChange={setCommuneFilter} />
 
         <button
           onClick={resetFilters}

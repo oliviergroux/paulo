@@ -20,7 +20,7 @@ export default function AuthenticatedShell({
   children,
   maxWidth,
 }: AuthenticatedShellProps) {
-  const { role, loading } = useUserRole();
+  const { role, commune, loading } = useUserRole();
 
   if (loading) {
     return (
@@ -38,6 +38,7 @@ export default function AuthenticatedShell({
     <AppShell
       role={role}
       activeNav={activeNav}
+      communeName={commune?.name}
       sidebarNote={sidebarNote}
       maxWidth={maxWidth}
     >

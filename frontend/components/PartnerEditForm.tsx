@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import type { PartnerDetail } from "@/lib/types";
+import { useEffect, useState } from "react";
+import type { CommuneItem, PartnerDetail } from "@/lib/types";
 import { SUBTYPES, subtypeLabel } from "@/lib/taxonomy";
+import { adminFetch } from "@/lib/api";
 
 type PartnerEditFormProps = {
   partner: PartnerDetail;
@@ -13,6 +14,7 @@ type PartnerEditFormProps = {
     address: string;
     category: string;
     subtype: string;
+    commune_id?: number | null;
   }) => Promise<void>;
 };
 
@@ -23,6 +25,7 @@ export default function PartnerEditForm({
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [communes, setCommunes] = useState<CommuneItem[]>([]);
   const [form, setForm] = useState({
     name: partner.name || "",
     siret: partner.siret || "",
@@ -30,9 +33,21 @@ export default function PartnerEditForm({
     address: partner.address || "",
     category: partner.category || "commerce",
     subtype: partner.subtype || "",
+    commune_id: partner.commune_id != null ? String(partner.commune_id) : "",
   });
 
   const subtypes = SUBTYPES[form.category] || [];
+
+  useEffect(() => {
+    if (!editing) return;
+
+    adminFetch("/communes")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) setCommunes(data);
+      })
+      .catch(() => {});
+  }, [editing]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -45,6 +60,7 @@ export default function PartnerEditForm({
         address: form.address.trim(),
         category: form.category,
         subtype: form.subtype,
+        commune_id: form.commune_id ? Number(form.commune_id) : null,
       });
       setEditing(false);
     } catch {
@@ -118,6 +134,22 @@ export default function PartnerEditForm({
             </option>
           ))}
         </select>
+        {communes.length > 0 && (
+          <select
+            value={form.commune_id}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, commune_id: e.target.value }))
+            }
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm md:col-span-2"
+          >
+            <option value="">Commune (auto depuis l'adresse si vide)</option>
+            {communes.map((commune) => (
+              <option key={commune.id} value={commune.id}>
+                {commune.name} ({commune.postal_code})
+              </option>
+            ))}
+          </select>
+        )}
         <input
           value={form.address}
           onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}

@@ -41,6 +41,7 @@ export default function PartnerDetailPage() {
     address: string;
     category: string;
     subtype: string;
+    commune_id?: number | null;
   }) => {
     const res = await adminFetch(`/partners/${id}`, {
       method: "PATCH",

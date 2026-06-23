@@ -254,6 +254,7 @@ Informations :
 * category (commerce, service_local, transport — pas mairie)
 * subtype (métier du partenaire)
 * address
+* commune_id (FK communes)
 * is_active
 * access_token
 
@@ -275,6 +276,7 @@ Informations :
 * subtype (sujet IA — y compris sous-types mairie)
 * status
 * client_id
+* commune_id (FK communes)
 * assigned_partner_id (commerces / artisans / taxi)
 * assigned_service (services municipaux, demandes mairie)
 * archived
@@ -284,6 +286,24 @@ Informations :
 Objectif :
 
 Suivi complet des demandes.
+
+---
+
+## communes
+
+Informations :
+
+* id
+* name
+* postal_code
+* department
+* is_active
+* created_at
+
+Objectif :
+
+Isoler demandes, partenaires et accès mairie par territoire.
+Routage automatique via code postal dans l'adresse ou message, sinon `DEFAULT_COMMUNE_ID`.
 
 ---
 
@@ -383,8 +403,20 @@ Le numéro de téléphone sert d'identifiant principal.
 ## Priorité Moyenne
 
 * Login partenaire
-* Gestion multi-communes
 * Historique client avancé
+
+## En cours / livré (Phase 1 multi-communes)
+
+* Table `communes` + `commune_id` sur partners/requests
+* CRUD communes admin (`/communes`)
+* Session mairie liée à une commune (`X-Commune-Id`)
+* Filtres commune sur dashboard admin et partenaires
+* Login mairie avec sélecteur si plusieurs communes actives
+
+Variables d'environnement :
+
+* `DEFAULT_COMMUNE_ID` — commune par défaut si CP non détecté
+* `MAIRIE_COMMUNE_ID` — commune fixe pour login mairie (optionnel)
 
 ## Priorité Future
 

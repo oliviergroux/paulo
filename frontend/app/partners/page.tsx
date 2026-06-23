@@ -7,6 +7,7 @@ import CategoryBadge from "@/components/CategoryBadge";
 import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
+import CommuneFilter from "@/components/CommuneFilter";
 import { adminFetch } from "@/lib/api";
 import { phoneTypeClass, phoneTypeLabel } from "@/lib/format";
 import type { PartnerDetail } from "@/lib/types";
@@ -15,9 +16,11 @@ export default function PartnersPage() {
   const [partners, setPartners] = useState<PartnerDetail[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [activeFilter, setActiveFilter] = useState("pending");
+  const [communeFilter, setCommuneFilter] = useState<number | null>(null);
 
   const fetchPartners = async () => {
-    const res = await adminFetch("/partners");
+    const query = communeFilter != null ? `?commune_id=${communeFilter}` : "";
+    const res = await adminFetch(`/partners${query}`);
     setPartners(await res.json());
   };
 
@@ -33,7 +36,7 @@ export default function PartnersPage() {
 
   useEffect(() => {
     fetchPartners();
-  }, []);
+  }, [communeFilter]);
 
   const filteredPartners = partners
     .filter((p) =>
@@ -131,6 +134,8 @@ export default function PartnersPage() {
           <option value="active">Validés</option>
         </select>
 
+        <CommuneFilter value={communeFilter} onChange={setCommuneFilter} />
+
         <div className="md:ml-auto text-sm text-slate-500">
           {filteredPartners.length} partenaire
           {filteredPartners.length > 1 ? "s" : ""} affiché
@@ -169,6 +174,12 @@ export default function PartnersPage() {
                     category={partner.category}
                     subtype={partner.subtype}
                   />
+
+                  {partner.commune_name && (
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-slate-100 text-slate-600">
+                      {partner.commune_name}
+                    </span>
+                  )}
 
                   <span
                     className={`text-xs font-semibold px-3 py-1 rounded-full ${phoneTypeClass(

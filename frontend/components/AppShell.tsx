@@ -6,6 +6,7 @@ import type { AdminNav, UserRole } from "@/lib/types";
 type AppShellProps = {
   role: UserRole;
   activeNav: AdminNav;
+  communeName?: string | null;
   sidebarNote?: {
     title: string;
     description: string;
@@ -19,6 +20,7 @@ const ADMIN_NAV: { id: AdminNav; href: string; label: string }[] = [
   { id: "mairie", href: "/mairie", label: "Mairie" },
   { id: "partners", href: "/partners", label: "Partenaires" },
   { id: "clients", href: "/clients", label: "Clients" },
+  { id: "communes", href: "/communes", label: "Communes" },
 ];
 
 const MAIRIE_NAV: { id: AdminNav; href: string; label: string }[] = [
@@ -35,6 +37,7 @@ async function handleLogout() {
 export default function AppShell({
   role,
   activeNav,
+  communeName,
   sidebarNote,
   children,
   maxWidth = "7xl",
@@ -110,7 +113,9 @@ export default function AppShell({
             {isMairie && (
               <div className="mt-4 rounded-2xl bg-violet-900/50 border border-violet-800 px-3 py-2">
                 <p className="text-xs text-violet-200">
-                  Vue collectivité — accès limité
+                  {communeName
+                    ? `Collectivité : ${communeName}`
+                    : "Vue collectivité — accès limité"}
                 </p>
               </div>
             )}

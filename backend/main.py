@@ -14,9 +14,16 @@ import requests
 
 from auth import (
     is_valid_admin_key,
+    parse_commune_id_header,
     partner_can_update_request,
     require_admin,
     verify_partner_token,
+)
+from communes import (
+    get_commune_by_id,
+    get_default_commune_id,
+    resolve_commune_id_for_partner,
+    resolve_commune_id_for_request,
 )
 from db import ensure_schema, get_db_connection
 from taxonomy import (
@@ -68,11 +75,52 @@ class PartnerUpdate(BaseModel):
     category: Optional[str] = None
     subtype: Optional[str] = None
     address: Optional[str] = None
+    commune_id: Optional[int] = None
+
+
+class CommuneCreate(BaseModel):
+    name: str = Field(..., min_length=2)
+    postal_code: str = Field(..., min_length=4)
+    department: Optional[str] = None
+
+
+class CommuneUpdate(BaseModel):
+    name: Optional[str] = None
+    postal_code: Optional[str] = None
+    department: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 # =========================
 # HELPERS
 # =========================
+
+def resolve_scope_commune_id(
+    query_commune_id: Optional[int],
+    header_commune_id: Optional[int],
+) -> Optional[int]:
+    if header_commune_id is not None:
+        return header_commune_id
+    return query_commune_id
+
+
+def assert_request_commune_access(
+    cur, request_id: int, commune_id: Optional[int]
+):
+    if commune_id is None:
+        return
+
+    cur.execute(
+        "SELECT commune_id FROM requests WHERE id = %s",
+        (request_id,),
+    )
+    row = cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="not_found")
+
+    if row["commune_id"] != commune_id:
+        raise HTTPException(status_code=403, detail="forbidden_commune")
 
 def normalize_french_phone(phone: str):
     if not phone:
@@ -230,19 +278,26 @@ def create_request_from_message(phone: str, message_text: str):
     normalized_phone = normalize_french_phone(phone)
     category = classify_category(message_text)
     subtype = classify_subtype(category, message_text)
+    client_info = extract_client_info(message_text)
     client_id = upsert_client(normalized_phone, message_text)
+    commune_id = resolve_commune_id_for_request(
+        client_info.get("address") or message_text
+    )
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("""
-                INSERT INTO requests (phone, transcription, category, subtype, client_id)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO requests (
+                    phone, transcription, category, subtype, client_id, commune_id
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
             """, (
                 normalized_phone,
                 message_text,
                 category,
                 subtype,
-                client_id
+                client_id,
+                commune_id,
             ))
 
     return {
@@ -251,6 +306,7 @@ def create_request_from_message(phone: str, message_text: str):
         "category": category,
         "subtype": subtype,
         "client_id": client_id,
+        "commune_id": commune_id,
     }
 
 
@@ -379,15 +435,154 @@ async def whatsapp_inbound(request: Request):
 
 
 # =========================
+# COMMUNES
+# =========================
+
+@app.get("/communes/active")
+def get_active_communes():
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, name, postal_code
+                FROM communes
+                WHERE is_active = true
+                ORDER BY name ASC
+                """
+            )
+            return cur.fetchall()
+
+
+@app.get("/communes")
+def get_communes(_admin=Depends(require_admin)):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    cm.id,
+                    cm.name,
+                    cm.postal_code,
+                    cm.department,
+                    cm.is_active,
+                    cm.created_at,
+                    COUNT(DISTINCT r.id) AS total_requests,
+                    COUNT(DISTINCT CASE
+                        WHEN r.archived = false
+                         AND r.status IN ('new', 'in_progress')
+                        THEN r.id
+                    END) AS active_requests,
+                    COUNT(DISTINCT p.id) AS partners_count
+                FROM communes cm
+                LEFT JOIN requests r ON r.commune_id = cm.id
+                LEFT JOIN partners p ON p.commune_id = cm.id AND p.category <> 'mairie'
+                GROUP BY
+                    cm.id,
+                    cm.name,
+                    cm.postal_code,
+                    cm.department,
+                    cm.is_active,
+                    cm.created_at
+                ORDER BY cm.name ASC
+                """
+            )
+            return cur.fetchall()
+
+
+@app.post("/communes")
+def create_commune(payload: CommuneCreate, _admin=Depends(require_admin)):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO communes (name, postal_code, department, is_active)
+                VALUES (%s, %s, %s, true)
+                RETURNING id, name, postal_code, department, is_active, created_at
+                """,
+                (
+                    payload.name.strip(),
+                    payload.postal_code.strip(),
+                    payload.department.strip() if payload.department else None,
+                ),
+            )
+            row = cur.fetchone()
+
+    return {"ok": True, "commune": row}
+
+
+@app.patch("/communes/{commune_id}")
+def update_commune(
+    commune_id: int, payload: CommuneUpdate, _admin=Depends(require_admin)
+):
+    fields = []
+    values = []
+
+    if payload.name is not None:
+        fields.append("name = %s")
+        values.append(payload.name.strip())
+
+    if payload.postal_code is not None:
+        fields.append("postal_code = %s")
+        values.append(payload.postal_code.strip())
+
+    if payload.department is not None:
+        fields.append("department = %s")
+        values.append(payload.department.strip() or None)
+
+    if payload.is_active is not None:
+        fields.append("is_active = %s")
+        values.append(payload.is_active)
+
+    if not fields:
+        return {"error": "no_fields"}
+
+    values.append(commune_id)
+
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"""
+                UPDATE communes
+                SET {", ".join(fields)}
+                WHERE id = %s
+                RETURNING id, name, postal_code, department, is_active, created_at
+                """,
+                values,
+            )
+            row = cur.fetchone()
+
+            if not row:
+                return {"error": "not_found"}
+
+    return {"ok": True, "commune": row}
+
+
+# =========================
 # REQUESTS
 # =========================
 
 @app.get("/requests")
-def get_requests(archived: bool = Query(False), _admin=Depends(require_admin)):
+def get_requests(
+    archived: bool = Query(False),
+    commune_id: Optional[int] = Query(None),
+    header_commune_id: Optional[int] = Depends(parse_commune_id_header),
+    _admin=Depends(require_admin),
+):
+    scope_commune_id = resolve_scope_commune_id(commune_id, header_commune_id)
     order = "DESC" if archived else "ASC"
+    filters = ["r.archived = %s"]
+    params: list = [archived]
+
+    if scope_commune_id is not None:
+        filters.append("r.commune_id = %s")
+        params.append(scope_commune_id)
+
+    where_clause = " AND ".join(filters)
+
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(f"""
+            cur.execute(
+                f"""
                 SELECT 
                     r.id,
                     r.phone,
@@ -397,6 +592,8 @@ def get_requests(archived: bool = Query(False), _admin=Depends(require_admin)):
                     r.status,
                     r.assigned_partner_id,
                     r.assigned_service,
+                    r.commune_id,
+                    cm.name AS commune_name,
                     p.name AS partner_name,
                     r.created_at,
                     r.handled_at,
@@ -408,9 +605,12 @@ def get_requests(archived: bool = Query(False), _admin=Depends(require_admin)):
                 FROM requests r
                 LEFT JOIN partners p ON r.assigned_partner_id = p.id
                 LEFT JOIN clients c ON r.client_id = c.id
-                WHERE r.archived = %s
+                LEFT JOIN communes cm ON r.commune_id = cm.id
+                WHERE {where_clause}
                 ORDER BY r.created_at {order}
-            """, (archived,))
+                """,
+                params,
+            )
             rows = cur.fetchall()
 
     return rows
@@ -423,6 +623,7 @@ def update_status(
     x_admin_key: Optional[str] = Header(default=None, alias="X-Admin-Key"),
     x_partner_token: Optional[str] = Header(default=None, alias="X-Partner-Token"),
     x_partner_id: Optional[str] = Header(default=None, alias="X-Partner-Id"),
+    header_commune_id: Optional[int] = Depends(parse_commune_id_header),
 ):
     allowed_status = ["new", "in_progress", "done"]
 
@@ -449,7 +650,10 @@ def update_status(
             raise HTTPException(status_code=401, detail="unauthorized")
 
     with get_db_connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            if is_admin and header_commune_id is not None:
+                assert_request_commune_access(cur, request_id, header_commune_id)
+
             if status == "done":
                 cur.execute(
                     """
@@ -473,12 +677,17 @@ def update_status(
 
 
 @app.post("/requests/{request_id}/archive")
-def archive_request(request_id: int, _admin=Depends(require_admin)):
+def archive_request(
+    request_id: int,
+    header_commune_id: Optional[int] = Depends(parse_commune_id_header),
+    _admin=Depends(require_admin),
+):
     with get_db_connection() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            assert_request_commune_access(cur, request_id, header_commune_id)
             cur.execute(
                 "UPDATE requests SET archived = true WHERE id = %s",
-                (request_id,)
+                (request_id,),
             )
 
     return {"ok": True}
@@ -486,7 +695,10 @@ def archive_request(request_id: int, _admin=Depends(require_admin)):
 
 @app.post("/requests/{request_id}/assign-service")
 def assign_request_service(
-    request_id: int, payload: dict = Body(...), _admin=Depends(require_admin)
+    request_id: int,
+    payload: dict = Body(...),
+    header_commune_id: Optional[int] = Depends(parse_commune_id_header),
+    _admin=Depends(require_admin),
 ):
     service = payload.get("service", "").strip().lower()
     valid, error = validate_mairie_service(service)
@@ -495,6 +707,7 @@ def assign_request_service(
 
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            assert_request_commune_access(cur, request_id, header_commune_id)
             cur.execute(
                 """
                 SELECT id, category
@@ -640,10 +853,25 @@ Voir la demande :
 # =========================
 
 @app.get("/partners")
-def get_partners(_admin=Depends(require_admin)):
+def get_partners(
+    commune_id: Optional[int] = Query(None),
+    header_commune_id: Optional[int] = Depends(parse_commune_id_header),
+    _admin=Depends(require_admin),
+):
+    scope_commune_id = resolve_scope_commune_id(commune_id, header_commune_id)
+    filters = ["p.category <> 'mairie'"]
+    params: list = []
+
+    if scope_commune_id is not None:
+        filters.append("p.commune_id = %s")
+        params.append(scope_commune_id)
+
+    where_clause = " AND ".join(filters)
+
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
+            cur.execute(
+                f"""
                 SELECT
                     p.id,
                     p.name,
@@ -654,12 +882,15 @@ def get_partners(_admin=Depends(require_admin)):
                     p.phone,
                     p.phone_type,
                     p.address,
+                    p.commune_id,
+                    cm.name AS commune_name,
                     COUNT(r.id) AS assigned_requests_count
                 FROM partners p
+                LEFT JOIN communes cm ON p.commune_id = cm.id
                 LEFT JOIN requests r
                     ON r.assigned_partner_id = p.id
                     AND r.archived = false
-                WHERE p.category <> 'mairie'
+                WHERE {where_clause}
                 GROUP BY
                     p.id,
                     p.name,
@@ -669,9 +900,13 @@ def get_partners(_admin=Depends(require_admin)):
                     p.siret,
                     p.phone,
                     p.phone_type,
-                    p.address
+                    p.address,
+                    p.commune_id,
+                    cm.name
                 ORDER BY p.is_active ASC, p.name ASC
-            """)
+                """,
+                params,
+            )
             rows = cur.fetchall()
 
     return rows
@@ -692,6 +927,7 @@ def create_partner_application(partner: PartnerCreate):
     normalized_phone = normalize_french_phone(partner.phone)
     phone_type = get_phone_type(partner.phone)
     access_token = secrets.token_urlsafe(32)
+    commune_id = resolve_commune_id_for_partner(partner.address.strip())
 
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -704,10 +940,11 @@ def create_partner_application(partner: PartnerCreate):
                     category,
                     subtype,
                     address,
+                    commune_id,
                     is_active,
                     access_token
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, false, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, false, %s)
                 RETURNING id, name, access_token, is_active
             """, (
                 partner.name.strip(),
@@ -717,6 +954,7 @@ def create_partner_application(partner: PartnerCreate):
                 category,
                 subtype,
                 partner.address.strip(),
+                commune_id,
                 access_token
             ))
 
@@ -770,7 +1008,7 @@ def get_partner(
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT id, name, category, subtype, is_active, created_at,
-                       access_token, siret, phone, phone_type, address
+                       access_token, siret, phone, phone_type, address, commune_id
                 FROM partners
                 WHERE id = %s
             """, (partner_id,))
@@ -835,37 +1073,76 @@ def get_partner_requests(
 # =========================
 
 @app.get("/clients")
-def get_clients(_admin=Depends(require_admin)):
+def get_clients(
+    commune_id: Optional[int] = Query(None),
+    header_commune_id: Optional[int] = Depends(parse_commune_id_header),
+    _admin=Depends(require_admin),
+):
+    scope_commune_id = resolve_scope_commune_id(commune_id, header_commune_id)
+
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
-                SELECT
-                    c.id,
-                    c.phone,
-                    c.first_name,
-                    c.last_name,
-                    c.address,
-                    c.created_at,
-                    c.updated_at,
-                    COUNT(r.id) AS total_requests,
-                    MAX(r.created_at) AS last_request_at
-                FROM clients c
-                LEFT JOIN requests r ON r.client_id = c.id
-                GROUP BY
-                    c.id,
-                    c.phone,
-                    c.first_name,
-                    c.last_name,
-                    c.address,
-                    c.created_at,
-                    c.updated_at
-                ORDER BY COALESCE(MAX(r.created_at), c.updated_at) DESC
-            """)
+            if scope_commune_id is None:
+                cur.execute("""
+                    SELECT
+                        c.id,
+                        c.phone,
+                        c.first_name,
+                        c.last_name,
+                        c.address,
+                        c.created_at,
+                        c.updated_at,
+                        COUNT(r.id) AS total_requests,
+                        MAX(r.created_at) AS last_request_at
+                    FROM clients c
+                    LEFT JOIN requests r ON r.client_id = c.id
+                    GROUP BY
+                        c.id,
+                        c.phone,
+                        c.first_name,
+                        c.last_name,
+                        c.address,
+                        c.created_at,
+                        c.updated_at
+                    ORDER BY COALESCE(MAX(r.created_at), c.updated_at) DESC
+                """)
+            else:
+                cur.execute(
+                    """
+                    SELECT
+                        c.id,
+                        c.phone,
+                        c.first_name,
+                        c.last_name,
+                        c.address,
+                        c.created_at,
+                        c.updated_at,
+                        COUNT(r.id) AS total_requests,
+                        MAX(r.created_at) AS last_request_at
+                    FROM clients c
+                    INNER JOIN requests r ON r.client_id = c.id
+                    WHERE r.commune_id = %s
+                    GROUP BY
+                        c.id,
+                        c.phone,
+                        c.first_name,
+                        c.last_name,
+                        c.address,
+                        c.created_at,
+                        c.updated_at
+                    ORDER BY COALESCE(MAX(r.created_at), c.updated_at) DESC
+                    """,
+                    (scope_commune_id,),
+                )
             return cur.fetchall()
 
 
 @app.get("/clients/{client_id}")
-def get_client_detail(client_id: int, _admin=Depends(require_admin)):
+def get_client_detail(
+    client_id: int,
+    header_commune_id: Optional[int] = Depends(parse_commune_id_header),
+    _admin=Depends(require_admin),
+):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
@@ -885,24 +1162,59 @@ def get_client_detail(client_id: int, _admin=Depends(require_admin)):
             if not client_row:
                 return {"error": "not_found"}
 
-            cur.execute("""
-                SELECT
-                    r.id,
-                    r.phone,
-                    r.transcription,
-                    r.category,
-                    r.subtype,
-                    r.status,
-                    r.created_at,
-                    r.handled_at,
-                    r.assigned_partner_id,
-                    r.assigned_service,
-                    p.name AS partner_name
-                FROM requests r
-                LEFT JOIN partners p ON r.assigned_partner_id = p.id
-                WHERE r.client_id = %s
-                ORDER BY r.created_at DESC
-            """, (client_id,))
+            if header_commune_id is not None:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM requests
+                    WHERE client_id = %s AND commune_id = %s
+                    LIMIT 1
+                    """,
+                    (client_id, header_commune_id),
+                )
+                if not cur.fetchone():
+                    return {"error": "not_found"}
+
+                cur.execute(
+                    """
+                    SELECT
+                        r.id,
+                        r.phone,
+                        r.transcription,
+                        r.category,
+                        r.subtype,
+                        r.status,
+                        r.created_at,
+                        r.handled_at,
+                        r.assigned_partner_id,
+                        r.assigned_service,
+                        p.name AS partner_name
+                    FROM requests r
+                    LEFT JOIN partners p ON r.assigned_partner_id = p.id
+                    WHERE r.client_id = %s AND r.commune_id = %s
+                    ORDER BY r.created_at DESC
+                    """,
+                    (client_id, header_commune_id),
+                )
+            else:
+                cur.execute("""
+                    SELECT
+                        r.id,
+                        r.phone,
+                        r.transcription,
+                        r.category,
+                        r.subtype,
+                        r.status,
+                        r.created_at,
+                        r.handled_at,
+                        r.assigned_partner_id,
+                        r.assigned_service,
+                        p.name AS partner_name
+                    FROM requests r
+                    LEFT JOIN partners p ON r.assigned_partner_id = p.id
+                    WHERE r.client_id = %s
+                    ORDER BY r.created_at DESC
+                """, (client_id,))
             requests_rows = cur.fetchall()
 
     return {
@@ -1016,6 +1328,20 @@ def update_partner(partner_id: int, payload: PartnerUpdate, _admin=Depends(requi
                 fields.append("address = %s")
                 values.append(payload.address.strip())
 
+            if payload.commune_id is not None:
+                commune = get_commune_by_id(payload.commune_id)
+                if not commune:
+                    return {"ok": False, "error": "invalid_commune"}
+                fields.append("commune_id = %s")
+                values.append(payload.commune_id)
+            elif payload.address is not None:
+                resolved_commune_id = resolve_commune_id_for_partner(
+                    payload.address.strip()
+                )
+                if resolved_commune_id is not None:
+                    fields.append("commune_id = %s")
+                    values.append(resolved_commune_id)
+
             if not fields:
                 return {"error": "no_fields"}
 
@@ -1026,7 +1352,8 @@ def update_partner(partner_id: int, payload: PartnerUpdate, _admin=Depends(requi
                 UPDATE partners
                 SET {", ".join(fields)}
                 WHERE id = %s
-                RETURNING id, name, siret, phone, phone_type, category, subtype, address, is_active, access_token, created_at
+                RETURNING id, name, siret, phone, phone_type, category, subtype,
+                          address, commune_id, is_active, access_token, created_at
                 """,
                 values,
             )

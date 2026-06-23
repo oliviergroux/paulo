@@ -3,6 +3,20 @@ export const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 
 export type UserRole = "admin" | "mairie";
 
+export type SessionContext = {
+  role: UserRole;
+  communeId: number | null;
+};
+
+type ParsedToken = {
+  role: UserRole;
+  communeId: number | null;
+  expiresAt: number;
+  payload: string;
+  signature: string;
+  secret: string;
+};
+
 function secretForRole(role: UserRole): string | null {
   if (role === "admin") return process.env.ADMIN_PASSWORD || null;
   return process.env.MAIRIE_PASSWORD || null;
@@ -37,39 +51,79 @@ function safeEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
-export async function createSessionToken(role: UserRole): Promise<string> {
+export async function createSessionToken(
+  role: UserRole,
+  communeId?: number | null
+): Promise<string> {
   const secret = secretForRole(role);
   if (!secret) {
     throw new Error(`${role} password is not configured`);
   }
 
   const expiresAt = Date.now() + SESSION_MAX_AGE * 1000;
-  const payload = `${role}:${expiresAt}`;
+  const payload =
+    role === "mairie" && communeId != null
+      ? `${role}:${communeId}:${expiresAt}`
+      : `${role}:${expiresAt}`;
+
   return `${payload}.${await signPayload(payload, secret)}`;
 }
 
-export async function getSessionRole(
-  token: string | undefined
-): Promise<UserRole | null> {
-  if (!token) return null;
-
+function parseToken(token: string): ParsedToken | null {
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return null;
 
-  const [roleRaw, expiresRaw] = payload.split(":");
+  const parts = payload.split(":");
+  let roleRaw: string;
+  let expiresRaw: string;
+  let communeId: number | null = null;
+
+  if (parts.length === 2) {
+    [roleRaw, expiresRaw] = parts;
+  } else if (parts.length === 3 && parts[0] === "mairie") {
+    roleRaw = parts[0];
+    communeId = Number(parts[1]);
+    expiresRaw = parts[2];
+    if (!Number.isFinite(communeId)) return null;
+  } else {
+    return null;
+  }
+
   if (roleRaw !== "admin" && roleRaw !== "mairie") return null;
 
   const role = roleRaw as UserRole;
   const secret = secretForRole(role);
   if (!secret) return null;
 
-  const expected = await signPayload(payload, secret);
-  if (!safeEqual(signature, expected)) return null;
-
   const expiresAt = Number(expiresRaw);
-  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return null;
+  if (!Number.isFinite(expiresAt)) return null;
 
-  return role;
+  return { role, communeId, expiresAt, payload, signature, secret };
+}
+
+export async function getSessionContext(
+  token: string | undefined
+): Promise<SessionContext | null> {
+  if (!token) return null;
+
+  const parsed = parseToken(token);
+  if (!parsed) return null;
+
+  const expected = await signPayload(parsed.payload, parsed.secret);
+  if (!safeEqual(parsed.signature, expected)) return null;
+  if (Date.now() > parsed.expiresAt) return null;
+
+  return {
+    role: parsed.role,
+    communeId: parsed.communeId,
+  };
+}
+
+export async function getSessionRole(
+  token: string | undefined
+): Promise<UserRole | null> {
+  const context = await getSessionContext(token);
+  return context?.role ?? null;
 }
 
 export function resolveRoleFromPassword(password: string): UserRole | null {
@@ -81,12 +135,13 @@ export function resolveRoleFromPassword(password: string): UserRole | null {
   return null;
 }
 
-export const ADMIN_ONLY_PATHS = ["/", "/partners", "/devenir-partenaire"];
+export const ADMIN_ONLY_PATHS = ["/", "/partners", "/devenir-partenaire", "/communes"];
 
 export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname === "/") return true;
   if (pathname.startsWith("/partners")) return true;
   if (pathname === "/devenir-partenaire") return true;
+  if (pathname.startsWith("/communes")) return true;
   return false;
 }
 
