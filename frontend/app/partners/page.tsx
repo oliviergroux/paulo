@@ -8,7 +8,12 @@ import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
 import CommuneFilter from "@/components/CommuneFilter";
+import PartnerValidationPanel from "@/components/PartnerValidationPanel";
 import { adminFetch } from "@/lib/api";
+import {
+  VALIDATION_STATUS_LABELS,
+  validationStatusClass,
+} from "@/lib/partner-validation";
 import { phoneTypeClass, phoneTypeLabel } from "@/lib/format";
 import type { PartnerDetail } from "@/lib/types";
 
@@ -17,6 +22,7 @@ export default function PartnersPage() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [activeFilter, setActiveFilter] = useState("pending");
   const [communeFilter, setCommuneFilter] = useState<number | null>(null);
+  const [actionId, setActionId] = useState<number | null>(null);
 
   const fetchPartners = async () => {
     const query = communeFilter != null ? `?commune_id=${communeFilter}` : "";
@@ -32,6 +38,20 @@ export default function PartnersPage() {
   const deactivatePartner = async (partnerId: number) => {
     await adminFetch(`/partners/${partnerId}/deactivate`, { method: "POST" });
     fetchPartners();
+  };
+
+  const confirmValidation = async (partnerId: number) => {
+    setActionId(partnerId);
+    await adminFetch(`/partners/${partnerId}/confirm-validation`, { method: "POST" });
+    await fetchPartners();
+    setActionId(null);
+  };
+
+  const revalidatePartner = async (partnerId: number) => {
+    setActionId(partnerId);
+    await adminFetch(`/partners/${partnerId}/revalidate`, { method: "POST" });
+    await fetchPartners();
+    setActionId(null);
   };
 
   useEffect(() => {
@@ -58,15 +78,15 @@ export default function PartnersPage() {
     <AuthenticatedShell
       activeNav="partners"
       sidebarNote={{
-        title: "Validation manuelle",
+        title: "Validation IA + admin",
         description:
-          "Les nouveaux partenaires restent inactifs tant qu’ils ne sont pas validés.",
+          "L'IA vérifie le SIRET via SIRENE et pré-valide. Vous confirmez si doute.",
       }}
     >
       <PageHeader
         eyebrow="Admin partenaires"
         title="Validation partenaires"
-        description="Vérifie les informations, active les profils sérieux, et garde le réseau propre."
+        description="L'IA vérifie SIRET, adresse et activité. Confirmation admin si doute."
         actions={
           <>
             <Link
@@ -170,6 +190,18 @@ export default function PartnersPage() {
                     {partner.is_active ? "VALIDÉ" : "À VALIDER"}
                   </span>
 
+                  {partner.validation_status && (
+                    <span
+                      className={`text-xs font-bold px-3 py-1 rounded-full ${validationStatusClass(
+                        partner.validation_status
+                      )}`}
+                    >
+                      {VALIDATION_STATUS_LABELS[
+                        partner.validation_status as keyof typeof VALIDATION_STATUS_LABELS
+                      ] || partner.validation_status}
+                    </span>
+                  )}
+
                   <CategoryBadge
                     category={partner.category}
                     subtype={partner.subtype}
@@ -218,6 +250,18 @@ export default function PartnersPage() {
                     </p>
                   </div>
                 </div>
+
+                {!partner.is_active && (
+                  <div className="mt-4">
+                    <PartnerValidationPanel
+                      partner={partner}
+                      confirming={actionId === partner.id}
+                      revalidating={actionId === partner.id}
+                      onConfirm={() => confirmValidation(partner.id)}
+                      onRevalidate={() => revalidatePartner(partner.id)}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4 flex flex-col gap-3">
@@ -254,9 +298,9 @@ export default function PartnersPage() {
                   ) : (
                     <button
                       onClick={() => activatePartner(partner.id)}
-                      className="w-full rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 text-sm font-semibold transition"
+                      className="w-full rounded-2xl bg-slate-950 hover:bg-slate-800 text-white px-4 py-3 text-sm font-semibold transition"
                     >
-                      Valider le partenaire
+                      Valider manuellement
                     </button>
                   )}
                 </div>

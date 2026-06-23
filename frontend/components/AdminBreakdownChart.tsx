@@ -1,49 +1,52 @@
 "use client";
 
-import type { AdminCategoryStat } from "@/lib/admin-stats";
-
-type AdminCategoryChartProps = {
-  stats: AdminCategoryStat[];
-  activeTotal: number;
+export type AdminBreakdownStat = {
+  id: string;
+  label: string;
+  newCount: number;
+  inProgressCount: number;
+  activeCount: number;
 };
 
-export default function AdminCategoryChart({
+type AdminBreakdownChartProps = {
+  title: string;
+  subtitle?: string;
+  stats: AdminBreakdownStat[];
+  activeTotal: number;
+  emptyMessage?: string;
+  accentClass?: string;
+};
+
+export default function AdminBreakdownChart({
+  title,
+  subtitle = "Demandes nouvelles et en cours de traitement",
   stats,
   activeTotal,
-}: AdminCategoryChartProps) {
-  const maxCount = stats.reduce(
-    (max, row) => Math.max(max, row.activeCount),
-    0
-  );
+  emptyMessage = "Aucune demande active pour le moment",
+  accentClass = "bg-blue-600",
+}: AdminBreakdownChartProps) {
+  const maxCount = stats.reduce((max, row) => Math.max(max, row.activeCount), 0);
 
   if (activeTotal === 0 || stats.length === 0) {
     return (
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-semibold text-slate-900">
-          Répartition par catégorie
-        </p>
-        <p className="text-sm text-slate-500 mt-1">
-          Demandes nouvelles et en cours de traitement
-        </p>
+      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm h-full">
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
         <div className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
-          <p className="text-sm font-medium text-slate-700">
-            Aucune demande active pour le moment
-          </p>
+          <p className="text-sm font-medium text-slate-700">{emptyMessage}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm h-full">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
         <div>
-          <p className="text-sm font-semibold text-slate-900">
-            Répartition par catégorie
-          </p>
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
           <p className="text-sm text-slate-500 mt-1">
             {activeTotal} demande{activeTotal > 1 ? "s" : ""} active
-            {activeTotal > 1 ? "s" : ""} — nouvelles et en cours
+            {activeTotal > 1 ? "s" : ""} — {subtitle.toLowerCase()}
           </p>
         </div>
 
@@ -53,13 +56,13 @@ export default function AdminCategoryChart({
             Nouveau
           </span>
           <span className="inline-flex items-center gap-2 text-slate-600">
-            <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
+            <span className={`h-2.5 w-2.5 rounded-full ${accentClass}`} />
             En cours
           </span>
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
         {stats.map((row) => {
           const scale = maxCount > 0 ? (row.activeCount / maxCount) * 100 : 0;
           const newWidth =
@@ -67,7 +70,7 @@ export default function AdminCategoryChart({
 
           return (
             <div
-              key={row.category}
+              key={row.id}
               className="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3"
             >
               <div className="flex items-center justify-between gap-3 mb-2">
@@ -96,7 +99,7 @@ export default function AdminCategoryChart({
                   )}
                   {row.inProgressCount > 0 && (
                     <span
-                      className="h-full bg-blue-600"
+                      className={`h-full ${accentClass}`}
                       style={{ width: `${100 - newWidth}%` }}
                     />
                   )}

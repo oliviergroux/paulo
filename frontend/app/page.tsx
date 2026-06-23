@@ -3,16 +3,19 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import AuthenticatedShell from "@/components/AuthenticatedShell";
-import AdminCategoryChart from "@/components/AdminCategoryChart";
+import AdminBreakdownChart from "@/components/AdminBreakdownChart";
 import CategoryBadge from "@/components/CategoryBadge";
+import DashboardPartnerReviewList from "@/components/DashboardPartnerReviewList";
 import StatusBadge from "@/components/StatusBadge";
 import { adminFetch } from "@/lib/api";
 import {
   computeAdminCategoryStats,
+  computeSubtypeStats,
   countActivePartners,
   countActiveRequests,
-  countPendingPartners,
-  getPendingPartners,
+  countActiveRequestsByCategory,
+  countPartnersNeedingReview,
+  getPartnersNeedingReview,
   getPriorityRequests,
 } from "@/lib/admin-stats";
 import { formatDayLabel, isUrgentRequest } from "@/lib/format";
@@ -22,6 +25,7 @@ export default function AdminDashboardPage() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [partners, setPartners] = useState<PartnerDetail[]>([]);
   const [communes, setCommunes] = useState<CommuneItem[]>([]);
+  const [actionId, setActionId] = useState<number | null>(null);
 
   const fetchData = async () => {
     const [requestsRes, partnersRes, communesRes] = await Promise.all([
@@ -42,9 +46,22 @@ export default function AdminDashboardPage() {
   }, []);
 
   const activeCount = countActiveRequests(requests);
-  const categoryStats = computeAdminCategoryStats(requests);
-  const pendingPartners = getPendingPartners(partners);
-  const pendingCount = countPendingPartners(partners);
+  const categoryStats = computeAdminCategoryStats(requests).map((row) => ({
+    id: row.category,
+    label: row.label,
+    newCount: row.newCount,
+    inProgressCount: row.inProgressCount,
+    activeCount: row.activeCount,
+  }));
+  const commerceStats = computeSubtypeStats(requests, "commerce");
+  const serviceLocalStats = computeSubtypeStats(requests, "service_local");
+  const commerceActive = countActiveRequestsByCategory(requests, "commerce");
+  const serviceLocalActive = countActiveRequestsByCategory(
+    requests,
+    "service_local"
+  );
+  const reviewPartners = getPartnersNeedingReview(partners);
+  const reviewCount = countPartnersNeedingReview(partners);
   const activePartnerCount = countActivePartners(partners);
   const priorityRequests = getPriorityRequests(requests);
   const todayCount = requests.filter(
@@ -93,8 +110,8 @@ export default function AdminDashboardPage() {
               href="/partners"
               className="rounded-2xl bg-white/10 backdrop-blur border border-white/20 px-5 py-3 min-w-[120px] hover:bg-white/20 transition"
             >
-              <p className="text-blue-200 text-xs">À valider</p>
-              <p className="text-2xl font-bold mt-1">{pendingCount}</p>
+              <p className="text-blue-200 text-xs">À confirmer</p>
+              <p className="text-2xl font-bold mt-1">{reviewCount}</p>
             </Link>
             <div className="rounded-2xl bg-white/10 backdrop-blur border border-white/20 px-5 py-3 min-w-[120px]">
               <p className="text-blue-200 text-xs">Communes actives</p>
@@ -122,61 +139,59 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="mb-8 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6">
-        <AdminCategoryChart stats={categoryStats} activeTotal={activeCount} />
+        <AdminBreakdownChart
+          title="Répartition par catégorie"
+          stats={categoryStats}
+          activeTotal={activeCount}
+        />
 
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-3 mb-5">
             <div>
-              <p className="text-sm font-semibold text-slate-900">Réseau partenaires</p>
+              <p className="text-sm font-semibold text-slate-900">
+                Réseau partenaires — validation admin
+              </p>
               <p className="text-sm text-slate-500 mt-1">
                 {activePartnerCount} validé{activePartnerCount > 1 ? "s" : ""}
-                {pendingCount > 0
-                  ? ` · ${pendingCount} en attente de validation`
-                  : ""}
+                {reviewCount > 0
+                  ? ` · ${reviewCount} dossier${reviewCount > 1 ? "s" : ""} à confirmer (crédibilité IA)`
+                  : " · aucun dossier en attente"}
               </p>
             </div>
             <Link
               href="/partners"
               className="rounded-xl bg-orange-600 text-white px-4 py-2 text-sm font-semibold hover:bg-orange-700 transition shrink-0"
             >
-              Valider
+              Tous les partenaires
             </Link>
           </div>
 
-          {pendingPartners.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-              <p className="text-sm font-medium text-slate-700">
-                Aucun partenaire en attente
-              </p>
-              <p className="text-xs text-slate-500 mt-2">
-                Les nouvelles inscriptions apparaîtront ici.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingPartners.map((partner) => (
-                <Link
-                  key={partner.id}
-                  href="/partners"
-                  className="block rounded-2xl border border-orange-200 bg-orange-50/60 hover:bg-orange-50 px-4 py-3 transition"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900">{partner.name}</p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {partner.commune_name || "Commune non renseignée"}
-                      </p>
-                    </div>
-                    <CategoryBadge
-                      category={partner.category}
-                      subtype={partner.subtype}
-                    />
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
+          <DashboardPartnerReviewList
+            partners={reviewPartners}
+            onUpdated={fetchData}
+            actionId={actionId}
+            setActionId={setActionId}
+          />
         </div>
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <AdminBreakdownChart
+          title="Commerce — sous-types"
+          subtitle="Boulanger, fleuriste, restaurant…"
+          stats={commerceStats}
+          activeTotal={commerceActive}
+          emptyMessage="Aucune demande commerce active"
+          accentClass="bg-emerald-600"
+        />
+        <AdminBreakdownChart
+          title="Service local — sous-types"
+          subtitle="Plombier, électricien, maçon…"
+          stats={serviceLocalStats}
+          activeTotal={serviceLocalActive}
+          emptyMessage="Aucune demande service local active"
+          accentClass="bg-orange-600"
+        />
       </div>
 
       <div className="mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

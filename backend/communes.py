@@ -85,6 +85,44 @@ def resolve_commune_id_for_request(client_address: Optional[str] = None) -> Opti
     return get_default_commune_id()
 
 
+def normalize_phone_digits(phone: str) -> str:
+    if not phone:
+        return ""
+    cleaned = re.sub(r"[^\d+]", "", phone.strip())
+    if cleaned.startswith("whatsapp:"):
+        cleaned = cleaned.replace("whatsapp:", "")
+    if cleaned.startswith("+33"):
+        cleaned = "0" + cleaned[3:]
+    elif cleaned.startswith("33") and len(cleaned) >= 11:
+        cleaned = "0" + cleaned[2:]
+    return cleaned
+
+
+def resolve_commune_id_from_inbound_phone(inbound_to: Optional[str]) -> Optional[int]:
+    """Resolve commune from the Twilio number that received the call/message."""
+    digits = normalize_phone_digits(inbound_to or "")
+    if not digits:
+        return None
+
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id
+                FROM communes
+                WHERE is_active = true
+                  AND phone IS NOT NULL
+                  AND regexp_replace(phone, '[^0-9]', '', 'g') = %s
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                (re.sub(r"\D", "", digits),),
+            )
+            row = cur.fetchone()
+
+    return row["id"] if row else None
+
+
 def resolve_commune_id_for_partner(address: str) -> Optional[int]:
     postal_code = extract_postal_code(address)
     if postal_code:

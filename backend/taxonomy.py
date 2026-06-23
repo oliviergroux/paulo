@@ -238,3 +238,37 @@ Réponds uniquement par le sous-type exact.
         return "taxi"
 
     return "autre"
+
+
+SUBTYPE_LABELS = {
+    "fleuriste": "Fleuriste",
+    "boucher": "Boucher",
+    "boulanger": "Boulanger",
+    "epicerie": "Épicerie",
+    "superette": "Supérette",
+    "pharmacie": "Pharmacie",
+    "fromager": "Fromager",
+    "poissonnier": "Poissonnier",
+    "restaurant": "Restaurant",
+    "cafe_bar": "Café / bar",
+    "coiffeur": "Coiffeur",
+    "tabac_presse": "Tabac / presse",
+    "librairie_papeterie": "Librairie / papeterie",
+    "quincaillerie": "Quincaillerie",
+    "vetement": "Vêtements",
+    "animalerie": "Animalerie",
+    "optique": "Optique",
+    "plombier": "Plombier",
+    "electricien": "Électricien",
+    "maçon": "Maçon",
+    "pisciniste": "Pisciniste",
+    "petits_travaux": "Petits travaux",
+    "taxi": "Taxi",
+    "autre": "Autre",
+}
+
+
+def subtype_label(subtype: str) -> str:
+    if not subtype:
+        return "Autre"
+    return SUBTYPE_LABELS.get(subtype, subtype.replace("_", " ").title())

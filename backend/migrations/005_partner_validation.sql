@@ -1,0 +1,14 @@
+ALTER TABLE partners
+ADD COLUMN IF NOT EXISTS validation_status VARCHAR(32) DEFAULT 'pending';
+
+ALTER TABLE partners
+ADD COLUMN IF NOT EXISTS validation_confidence DOUBLE PRECISION;
+
+ALTER TABLE partners
+ADD COLUMN IF NOT EXISTS validation_report JSONB;
+
+ALTER TABLE partners
+ADD COLUMN IF NOT EXISTS sirene_snapshot JSONB;
+
+ALTER TABLE partners
+ADD COLUMN IF NOT EXISTS validated_at TIMESTAMPTZ;

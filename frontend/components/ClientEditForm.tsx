@@ -53,7 +53,7 @@ export default function ClientEditForm({ client, onSave }: ClientEditFormProps) 
 
   return (
     <div className="rounded-3xl border border-blue-200 bg-blue-50/40 p-5 space-y-4">
-      <p className="text-sm font-semibold text-slate-900">Modifier la fiche client</p>
+      <p className="text-sm font-semibold text-slate-900">Modifier le contact</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <input

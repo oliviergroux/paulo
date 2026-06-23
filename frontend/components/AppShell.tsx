@@ -20,14 +20,14 @@ const ADMIN_NAV: { id: AdminNav; href: string; label: string }[] = [
   { id: "demandes", href: "/demandes", label: "Demandes" },
   { id: "mairie", href: "/mairie", label: "Mairie" },
   { id: "partners", href: "/partners", label: "Partenaires" },
-  { id: "clients", href: "/clients", label: "Clients" },
+  { id: "contacts", href: "/contacts", label: "Contacts" },
   { id: "communes", href: "/communes", label: "Communes" },
 ];
 
 const MAIRIE_NAV: { id: AdminNav; href: string; label: string }[] = [
   { id: "mairie", href: "/mairie", label: "Demandes actives" },
   { id: "mairie_archives", href: "/mairie/archives", label: "Archives" },
-  { id: "clients", href: "/clients", label: "Habitants" },
+  { id: "contacts", href: "/contacts", label: "Contacts" },
 ];
 
 async function handleLogout() {

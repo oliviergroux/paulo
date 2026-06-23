@@ -37,6 +37,11 @@ export type PartnerDetail = PartnerSummary & {
   address?: string;
   commune_id?: number | null;
   commune_name?: string | null;
+  validation_status?: string | null;
+  validation_confidence?: number | null;
+  validation_report?: Record<string, unknown> | null;
+  sirene_snapshot?: Record<string, unknown> | null;
+  validated_at?: string | null;
   assigned_requests_count?: number;
   access_token?: string;
   created_at?: string;
@@ -66,11 +71,16 @@ export type ClientItem = {
   first_name?: string | null;
   last_name?: string | null;
   address?: string | null;
+  commune_id?: number | null;
+  commune_name?: string | null;
   created_at?: string;
   updated_at?: string;
   total_requests?: number;
   last_request_at?: string | null;
 };
+
+/** Alias UI — table backend reste `clients`. */
+export type ContactItem = ClientItem;
 
 export type UserRole = "admin" | "mairie";
 
@@ -80,5 +90,5 @@ export type AdminNav =
   | "mairie"
   | "mairie_archives"
   | "partners"
-  | "clients"
+  | "contacts"
   | "communes";

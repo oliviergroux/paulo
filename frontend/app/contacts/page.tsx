@@ -7,25 +7,25 @@ import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
 import { displayClientName, formatDate } from "@/lib/format";
-import type { ClientItem } from "@/lib/types";
+import type { ContactItem } from "@/lib/types";
 
-export default function ClientsPage() {
-  const [clients, setClients] = useState<ClientItem[]>([]);
+export default function ContactsPage() {
+  const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [search, setSearch] = useState("");
   const { role, loading: roleLoading, fetchApi } = useRoleFetch();
 
-  const fetchClients = async () => {
-    const res = await fetchApi("/clients");
+  const fetchContacts = async () => {
+    const res = await fetchApi("/contacts");
     const data = await res.json();
-    setClients(Array.isArray(data) ? data : []);
+    setContacts(Array.isArray(data) ? data : []);
   };
 
   useEffect(() => {
-    if (!roleLoading && role) fetchClients();
+    if (!roleLoading && role) fetchContacts();
   }, [role, roleLoading]);
 
-  const filteredClients = clients.filter((client) => {
-    const fullName = [client.first_name, client.last_name]
+  const filteredContacts = contacts.filter((contact) => {
+    const fullName = [contact.first_name, contact.last_name]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -33,30 +33,31 @@ export default function ClientsPage() {
 
     return (
       fullName.includes(query) ||
-      client.phone?.toLowerCase().includes(query) ||
-      client.address?.toLowerCase().includes(query)
+      contact.phone?.toLowerCase().includes(query) ||
+      contact.address?.toLowerCase().includes(query) ||
+      contact.commune_name?.toLowerCase().includes(query)
     );
   });
 
-  const namedCount = clients.filter((c) => c.first_name || c.last_name).length;
-  const totalRequests = clients.reduce(
+  const namedCount = contacts.filter((c) => c.first_name || c.last_name).length;
+  const totalRequests = contacts.reduce(
     (sum, c) => sum + Number(c.total_requests || 0),
     0
   );
 
   return (
     <AuthenticatedShell
-      activeNav="clients"
+      activeNav="contacts"
       sidebarNote={{
-        title: role === "mairie" ? "Habitants" : "CRM habitants",
+        title: "Contacts",
         description:
-          "Fiches créées automatiquement depuis les appels et WhatsApp.",
+          "Habitants et contacts créés automatiquement depuis les appels et WhatsApp.",
       }}
     >
       <PageHeader
-        eyebrow={role === "mairie" ? "Collectivité" : "CRM local"}
-        title={role === "mairie" ? "Habitants" : "Clients"}
-        description="Fiches clients créées automatiquement depuis les appels et WhatsApp."
+        eyebrow={role === "mairie" ? "Collectivité" : "Relation locale"}
+        title="Contacts"
+        description="Fiches créées automatiquement depuis les appels et WhatsApp, rattachées à une commune."
         actions={
           role === "admin" ? (
             <>
@@ -64,7 +65,7 @@ export default function ClientsPage() {
                 href="/"
                 className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-800 transition"
               >
-                Retour demandes
+                Dashboard
               </Link>
               <Link
                 href="/partners"
@@ -85,7 +86,7 @@ export default function ClientsPage() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <KpiCard label="Clients" value={clients.length} variant="blue" />
+        <KpiCard label="Contacts" value={contacts.length} variant="blue" />
         <KpiCard
           label="Profils identifiés"
           value={namedCount}
@@ -104,27 +105,32 @@ export default function ClientsPage() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher par nom, téléphone ou adresse..."
+          placeholder="Rechercher par nom, téléphone, adresse ou commune..."
           className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
         />
       </div>
 
       <div className="space-y-4">
-        {filteredClients.map((client) => (
+        {filteredContacts.map((contact) => (
           <article
-            key={client.id}
+            key={contact.id}
             className="bg-white border border-slate-200 rounded-[28px] shadow-sm hover:border-blue-200 hover:shadow-md transition"
           >
             <div className="p-5 md:p-6 grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-6">
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-4">
                   <h2 className="text-xl font-bold">
-                    {displayClientName(client.first_name, client.last_name)}
+                    {displayClientName(contact.first_name, contact.last_name)}
                   </h2>
                   <span className="text-xs font-semibold bg-slate-100 text-slate-700 px-3 py-1 rounded-full">
-                    {client.phone}
+                    {contact.phone}
                   </span>
-                  {client.address && (
+                  {contact.commune_name && (
+                    <span className="text-xs font-semibold bg-violet-100 text-violet-700 px-3 py-1 rounded-full">
+                      {contact.commune_name}
+                    </span>
+                  )}
+                  {contact.address && (
                     <span className="text-xs font-semibold bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full">
                       Adresse connue
                     </span>
@@ -136,14 +142,14 @@ export default function ClientsPage() {
                     <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
                       Téléphone
                     </p>
-                    <p className="font-semibold mt-2">{client.phone}</p>
+                    <p className="font-semibold mt-2">{contact.phone}</p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
                     <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
                       Dernière demande
                     </p>
                     <p className="font-semibold mt-2">
-                      {formatDate(client.last_request_at)}
+                      {formatDate(contact.last_request_at)}
                     </p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 md:col-span-2">
@@ -151,7 +157,7 @@ export default function ClientsPage() {
                       Adresse
                     </p>
                     <p className="font-semibold mt-2">
-                      {client.address || "Non renseignée"}
+                      {contact.address || "Non renseignée"}
                     </p>
                   </div>
                 </div>
@@ -163,15 +169,15 @@ export default function ClientsPage() {
                     Activité
                   </p>
                   <p className="text-3xl font-bold mt-2">
-                    {Number(client.total_requests || 0)}
+                    {Number(contact.total_requests || 0)}
                   </p>
                   <p className="text-sm text-slate-500">
                     demande
-                    {Number(client.total_requests || 0) > 1 ? "s" : ""}
+                    {Number(contact.total_requests || 0) > 1 ? "s" : ""}
                   </p>
                 </div>
                 <Link
-                  href={`/clients/${client.id}`}
+                  href={`/contacts/${contact.id}`}
                   className="w-full text-center rounded-2xl bg-slate-950 text-white px-4 py-3 text-sm font-semibold hover:bg-slate-800 transition"
                 >
                   Voir la fiche
@@ -181,8 +187,8 @@ export default function ClientsPage() {
           </article>
         ))}
 
-        {filteredClients.length === 0 && (
-          <EmptyState message="Aucun client trouvé." />
+        {filteredContacts.length === 0 && (
+          <EmptyState message="Aucun contact trouvé." />
         )}
       </div>
     </AuthenticatedShell>

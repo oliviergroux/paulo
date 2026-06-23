@@ -40,6 +40,7 @@ export default function BecomePartnerPage() {
     name: string;
     access_token: string;
     is_active: boolean;
+    validation_status?: string;
   } | null>(null);
 
   const [loading, setLoading] = useState(false);
@@ -168,15 +169,28 @@ export default function BecomePartnerPage() {
             vérifié prochainement par l’équipe Paulo.
           </p>
 
-          <div className="mt-6 rounded-3xl bg-orange-50 border border-orange-200 p-5">
-            <p className="font-semibold text-orange-800">
-              ⏳ Validation en cours
-            </p>
-            <p className="text-sm text-orange-700 mt-2 leading-6">
-              Votre tableau de bord est accessible, mais vous ne recevrez pas
-              encore de demandes tant que votre profil n’a pas été validé.
-            </p>
-          </div>
+          {createdPartner.is_active ? (
+            <div className="mt-6 rounded-3xl bg-emerald-50 border border-emerald-200 p-5">
+              <p className="font-semibold text-emerald-800">
+                ✅ Profil validé automatiquement
+              </p>
+              <p className="text-sm text-emerald-700 mt-2 leading-6">
+                Votre dossier a été vérifié via le registre SIRENE. Vous pouvez
+                recevoir des demandes dès maintenant.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 rounded-3xl bg-orange-50 border border-orange-200 p-5">
+              <p className="font-semibold text-orange-800">
+                ⏳ Validation en cours
+              </p>
+              <p className="text-sm text-orange-700 mt-2 leading-6">
+                Votre profil a bien été créé. Notre agent IA a analysé votre
+                dossier — l&apos;équipe Paulo confirmera sous peu si une
+                vérification complémentaire est nécessaire.
+              </p>
+            </div>
+          )}
 
           <div className="mt-6 rounded-3xl bg-slate-50 border border-slate-200 p-5">
             <p className="text-sm font-semibold text-slate-700 mb-2">

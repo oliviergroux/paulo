@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Bod
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, Json
 from openai import OpenAI
 from twilio.rest import Client as TwilioClient
 from typing import Optional
@@ -24,8 +24,10 @@ from communes import (
     get_default_commune_id,
     resolve_commune_id_for_partner,
     resolve_commune_id_for_request,
+    resolve_commune_id_from_inbound_phone,
 )
 from db import ensure_schema, get_db_connection
+from partner_validation import validate_partner_application
 from taxonomy import (
     PARTNER_CATEGORIES,
     build_subtype_classification_prompt,
@@ -66,6 +68,7 @@ class ClientUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     address: Optional[str] = None
+    commune_id: Optional[int] = None
 
 
 class PartnerUpdate(BaseModel):
@@ -258,20 +261,27 @@ Demande :
         }
 
 
-def upsert_client(phone: str, message_text: str):
+def upsert_client(
+    phone: str,
+    message_text: str,
+    commune_id: Optional[int] = None,
+):
     normalized_phone = normalize_french_phone(phone)
     info = extract_client_info(message_text)
 
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                INSERT INTO clients (phone, first_name, last_name, address, updated_at)
-                VALUES (%s, %s, %s, %s, NOW())
+                INSERT INTO clients (
+                    phone, first_name, last_name, address, commune_id, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, NOW())
                 ON CONFLICT (phone)
                 DO UPDATE SET
                     first_name = COALESCE(EXCLUDED.first_name, clients.first_name),
                     last_name = COALESCE(EXCLUDED.last_name, clients.last_name),
                     address = COALESCE(EXCLUDED.address, clients.address),
+                    commune_id = COALESCE(EXCLUDED.commune_id, clients.commune_id),
                     updated_at = NOW()
                 RETURNING id
             """, (
@@ -279,6 +289,7 @@ def upsert_client(phone: str, message_text: str):
                 info.get("first_name"),
                 info.get("last_name"),
                 info.get("address"),
+                commune_id,
             ))
 
             row = cur.fetchone()
@@ -286,15 +297,20 @@ def upsert_client(phone: str, message_text: str):
     return row["id"]
 
 
-def create_request_from_message(phone: str, message_text: str):
+def create_request_from_message(
+    phone: str,
+    message_text: str,
+    inbound_to: Optional[str] = None,
+):
     normalized_phone = normalize_french_phone(phone)
     category = classify_category(message_text)
     subtype = classify_subtype(category, message_text)
     client_info = extract_client_info(message_text)
-    client_id = upsert_client(normalized_phone, message_text)
-    commune_id = resolve_commune_id_for_request(
-        client_info.get("address") or message_text
+    commune_id = (
+        resolve_commune_id_from_inbound_phone(inbound_to)
+        or resolve_commune_id_for_request(client_info.get("address") or message_text)
     )
+    client_id = upsert_client(normalized_phone, message_text, commune_id)
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
@@ -385,6 +401,7 @@ async def recording(request: Request):
 
     recording_url = form.get("RecordingUrl")
     caller = form.get("From")
+    called = form.get("To")
 
     audio_file = requests.get(
         recording_url + ".wav",
@@ -400,7 +417,7 @@ async def recording(request: Request):
             file=f
         )
 
-    create_request_from_message(caller, transcript.text)
+    create_request_from_message(caller, transcript.text, inbound_to=called)
 
     return Response(
         content="""
@@ -422,6 +439,7 @@ async def whatsapp_inbound(request: Request):
 
     message_body = form.get("Body")
     sender = form.get("From")
+    recipient = form.get("To")
     phone = sender.replace("whatsapp:", "") if sender else sender
 
     if not message_body:
@@ -434,7 +452,7 @@ async def whatsapp_inbound(request: Request):
             media_type="application/xml"
         )
 
-    create_request_from_message(phone, message_body)
+    create_request_from_message(phone, message_body, inbound_to=recipient)
 
     return Response(
         content="""
@@ -986,6 +1004,11 @@ def get_partners(
                     p.phone_type,
                     p.address,
                     p.commune_id,
+                    p.validation_status,
+                    p.validation_confidence,
+                    p.validation_report,
+                    p.sirene_snapshot,
+                    p.validated_at,
                     cm.name AS commune_name,
                     COUNT(r.id) AS assigned_requests_count
                 FROM partners p
@@ -1005,6 +1028,11 @@ def get_partners(
                     p.phone_type,
                     p.address,
                     p.commune_id,
+                    p.validation_status,
+                    p.validation_confidence,
+                    p.validation_report,
+                    p.sirene_snapshot,
+                    p.validated_at,
                     cm.name
                 ORDER BY p.is_active ASC, p.name ASC
                 """,
@@ -1031,6 +1059,14 @@ def create_partner_application(partner: PartnerCreate):
     phone_type = get_phone_type(partner.phone)
     access_token = secrets.token_urlsafe(32)
     commune_id = resolve_commune_id_for_partner(partner.address.strip())
+    partner_payload = {
+        "name": partner.name.strip(),
+        "siret": partner.siret.strip(),
+        "phone": normalized_phone,
+        "category": category,
+        "subtype": subtype,
+        "address": partner.address.strip(),
+    }
 
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1045,27 +1081,62 @@ def create_partner_application(partner: PartnerCreate):
                     address,
                     commune_id,
                     is_active,
-                    access_token
+                    access_token,
+                    validation_status
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, false, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, false, %s, 'pending')
                 RETURNING id, name, access_token, is_active
             """, (
-                partner.name.strip(),
-                partner.siret.strip(),
+                partner_payload["name"],
+                partner_payload["siret"],
                 normalized_phone,
                 phone_type,
                 category,
                 subtype,
-                partner.address.strip(),
+                partner_payload["address"],
                 commune_id,
-                access_token
+                access_token,
             ))
 
+            new_partner = cur.fetchone()
+            partner_id = new_partner["id"]
+
+            validation = validate_partner_application(partner_payload)
+
+            cur.execute(
+                """
+                UPDATE partners
+                SET
+                    validation_status = %s,
+                    validation_confidence = %s,
+                    validation_report = %s,
+                    sirene_snapshot = %s,
+                    is_active = %s,
+                    validated_at = CASE WHEN %s THEN NOW() ELSE NULL END
+                WHERE id = %s
+                RETURNING id, name, access_token, is_active, validation_status, validation_confidence
+                """,
+                (
+                    validation["validation_status"],
+                    validation["validation_confidence"],
+                    Json(validation["validation_report"]),
+                    Json(validation["sirene_snapshot"]),
+                    validation["is_active"],
+                    validation["auto_approved"],
+                    partner_id,
+                ),
+            )
             new_partner = cur.fetchone()
 
     return {
         "ok": True,
-        "partner": new_partner
+        "partner": new_partner,
+        "validation": {
+            "status": validation["validation_status"],
+            "confidence": validation["validation_confidence"],
+            "auto_approved": validation["auto_approved"],
+            "summary": validation["validation_report"].get("summary"),
+        },
     }
 
 
@@ -1076,13 +1147,119 @@ def activate_partner(partner_id: int, _admin=Depends(require_admin)):
             cur.execute(
                 """
                 UPDATE partners
-                SET is_active = true
+                SET is_active = true,
+                    validation_status = 'admin_validated',
+                    validated_at = NOW()
                 WHERE id = %s
                 """,
-                (partner_id,)
+                (partner_id,),
             )
 
     return {"ok": True}
+
+
+@app.post("/partners/{partner_id}/confirm-validation")
+def confirm_partner_validation(partner_id: int, _admin=Depends(require_admin)):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, validation_status, is_active
+                FROM partners
+                WHERE id = %s
+                """,
+                (partner_id,),
+            )
+            partner = cur.fetchone()
+
+            if not partner:
+                return {"ok": False, "error": "not_found"}
+
+            if partner["validation_status"] not in ("needs_review", "rejected", "pending"):
+                return {
+                    "ok": False,
+                    "error": "invalid_status",
+                    "detail": "Ce partenaire ne nécessite pas de confirmation admin.",
+                }
+
+            cur.execute(
+                """
+                UPDATE partners
+                SET is_active = true,
+                    validation_status = 'admin_validated',
+                    validated_at = NOW()
+                WHERE id = %s
+                RETURNING id, name, is_active, validation_status, validated_at
+                """,
+                (partner_id,),
+            )
+            row = cur.fetchone()
+
+    return {"ok": True, "partner": row}
+
+
+@app.post("/partners/{partner_id}/revalidate")
+def revalidate_partner(partner_id: int, _admin=Depends(require_admin)):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, name, siret, phone, category, subtype, address, is_active
+                FROM partners
+                WHERE id = %s
+                """,
+                (partner_id,),
+            )
+            partner = cur.fetchone()
+
+            if not partner:
+                return {"ok": False, "error": "not_found"}
+
+            validation = validate_partner_application(partner)
+
+            if partner["is_active"]:
+                validation_status = "admin_validated"
+                is_active = True
+                set_validated_at = True
+            else:
+                validation_status = validation["validation_status"]
+                is_active = validation["is_active"]
+                set_validated_at = validation["auto_approved"]
+
+            cur.execute(
+                """
+                UPDATE partners
+                SET
+                    validation_status = %s,
+                    validation_confidence = %s,
+                    validation_report = %s,
+                    sirene_snapshot = %s,
+                    is_active = %s,
+                    validated_at = CASE WHEN %s THEN NOW() ELSE validated_at END
+                WHERE id = %s
+                RETURNING
+                    id,
+                    name,
+                    is_active,
+                    validation_status,
+                    validation_confidence,
+                    validation_report,
+                    sirene_snapshot,
+                    validated_at
+                """,
+                (
+                    validation_status,
+                    validation["validation_confidence"],
+                    Json(validation["validation_report"]),
+                    Json(validation["sirene_snapshot"]),
+                    is_active,
+                    set_validated_at,
+                    partner_id,
+                ),
+            )
+            row = cur.fetchone()
+
+    return {"ok": True, "partner": row, "validation": validation}
 
 
 @app.post("/partners/{partner_id}/deactivate")
@@ -1172,10 +1349,11 @@ def get_partner_requests(
 
 
 # =========================
-# CLIENTS
+# CONTACTS (table clients)
 # =========================
 
 @app.get("/clients")
+@app.get("/contacts")
 def get_clients(
     commune_id: Optional[int] = Query(None),
     header_commune_id: Optional[int] = Depends(parse_commune_id_header),
@@ -1193,11 +1371,14 @@ def get_clients(
                         c.first_name,
                         c.last_name,
                         c.address,
+                        c.commune_id,
+                        cm.name AS commune_name,
                         c.created_at,
                         c.updated_at,
                         COUNT(r.id) AS total_requests,
                         MAX(r.created_at) AS last_request_at
                     FROM clients c
+                    LEFT JOIN communes cm ON c.commune_id = cm.id
                     LEFT JOIN requests r ON r.client_id = c.id
                     GROUP BY
                         c.id,
@@ -1205,6 +1386,8 @@ def get_clients(
                         c.first_name,
                         c.last_name,
                         c.address,
+                        c.commune_id,
+                        cm.name,
                         c.created_at,
                         c.updated_at
                     ORDER BY COALESCE(MAX(r.created_at), c.updated_at) DESC
@@ -1218,29 +1401,45 @@ def get_clients(
                         c.first_name,
                         c.last_name,
                         c.address,
+                        c.commune_id,
+                        cm.name AS commune_name,
                         c.created_at,
                         c.updated_at,
                         COUNT(r.id) AS total_requests,
                         MAX(r.created_at) AS last_request_at
                     FROM clients c
-                    INNER JOIN requests r ON r.client_id = c.id
-                    WHERE r.commune_id = %s
+                    LEFT JOIN communes cm ON c.commune_id = cm.id
+                    LEFT JOIN requests r ON r.client_id = c.id
+                        AND r.commune_id = %s
+                    WHERE c.commune_id = %s
+                       OR (
+                           c.commune_id IS NULL
+                           AND EXISTS (
+                               SELECT 1
+                               FROM requests r2
+                               WHERE r2.client_id = c.id
+                                 AND r2.commune_id = %s
+                           )
+                       )
                     GROUP BY
                         c.id,
                         c.phone,
                         c.first_name,
                         c.last_name,
                         c.address,
+                        c.commune_id,
+                        cm.name,
                         c.created_at,
                         c.updated_at
                     ORDER BY COALESCE(MAX(r.created_at), c.updated_at) DESC
                     """,
-                    (scope_commune_id,),
+                    (scope_commune_id, scope_commune_id, scope_commune_id),
                 )
             return cur.fetchall()
 
 
 @app.get("/clients/{client_id}")
+@app.get("/contacts/{client_id}")
 def get_client_detail(
     client_id: int,
     header_commune_id: Optional[int] = Depends(parse_commune_id_header),
@@ -1250,15 +1449,18 @@ def get_client_detail(
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
                 SELECT
-                    id,
-                    phone,
-                    first_name,
-                    last_name,
-                    address,
-                    created_at,
-                    updated_at
-                FROM clients
-                WHERE id = %s
+                    c.id,
+                    c.phone,
+                    c.first_name,
+                    c.last_name,
+                    c.address,
+                    c.commune_id,
+                    cm.name AS commune_name,
+                    c.created_at,
+                    c.updated_at
+                FROM clients c
+                LEFT JOIN communes cm ON c.commune_id = cm.id
+                WHERE c.id = %s
             """, (client_id,))
             client_row = cur.fetchone()
 
@@ -1266,17 +1468,18 @@ def get_client_detail(
                 return {"error": "not_found"}
 
             if header_commune_id is not None:
-                cur.execute(
-                    """
-                    SELECT 1
-                    FROM requests
-                    WHERE client_id = %s AND commune_id = %s
-                    LIMIT 1
-                    """,
-                    (client_id, header_commune_id),
-                )
-                if not cur.fetchone():
-                    return {"error": "not_found"}
+                if client_row.get("commune_id") != header_commune_id:
+                    cur.execute(
+                        """
+                        SELECT 1
+                        FROM requests
+                        WHERE client_id = %s AND commune_id = %s
+                        LIMIT 1
+                        """,
+                        (client_id, header_commune_id),
+                    )
+                    if not cur.fetchone():
+                        return {"error": "not_found"}
 
                 cur.execute(
                     """
@@ -1327,6 +1530,7 @@ def get_client_detail(
 
 
 @app.patch("/clients/{client_id}")
+@app.patch("/contacts/{client_id}")
 def update_client(client_id: int, payload: ClientUpdate, _admin=Depends(require_admin)):
     fields = []
     values = []
@@ -1343,6 +1547,13 @@ def update_client(client_id: int, payload: ClientUpdate, _admin=Depends(require_
         fields.append("address = %s")
         values.append(payload.address.strip() or None)
 
+    if payload.commune_id is not None:
+        commune = get_commune_by_id(payload.commune_id)
+        if not commune:
+            return {"error": "invalid_commune"}
+        fields.append("commune_id = %s")
+        values.append(payload.commune_id)
+
     if not fields:
         return {"error": "no_fields"}
 
@@ -1356,7 +1567,15 @@ def update_client(client_id: int, payload: ClientUpdate, _admin=Depends(require_
                 UPDATE clients
                 SET {", ".join(fields)}
                 WHERE id = %s
-                RETURNING id, phone, first_name, last_name, address, created_at, updated_at
+                RETURNING
+                    id,
+                    phone,
+                    first_name,
+                    last_name,
+                    address,
+                    commune_id,
+                    created_at,
+                    updated_at
                 """,
                 values,
             )
@@ -1364,6 +1583,15 @@ def update_client(client_id: int, payload: ClientUpdate, _admin=Depends(require_
 
             if not row:
                 return {"error": "not_found"}
+
+            if row.get("commune_id"):
+                cur.execute(
+                    "SELECT name FROM communes WHERE id = %s",
+                    (row["commune_id"],),
+                )
+                commune_row = cur.fetchone()
+                if commune_row:
+                    row["commune_name"] = commune_row["name"]
 
     return {"ok": True, "client": row}
 

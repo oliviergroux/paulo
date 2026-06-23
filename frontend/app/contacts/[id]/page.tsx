@@ -12,33 +12,33 @@ import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { useRoleFetch } from "@/components/AuthenticatedShell";
 import { displayClientName, formatDate, isMairieRequest } from "@/lib/format";
-import type { ClientItem, RequestItem } from "@/lib/types";
+import type { ContactItem, RequestItem } from "@/lib/types";
 
-export default function ClientDetailPage() {
+export default function ContactDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const { role, loading: roleLoading, fetchApi } = useRoleFetch();
 
-  const [client, setClient] = useState<ClientItem | null>(null);
+  const [contact, setContact] = useState<ContactItem | null>(null);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const fetchClient = async () => {
-    const res = await fetchApi(`/clients/${id}`);
+  const fetchContact = async () => {
+    const res = await fetchApi(`/contacts/${id}`);
     const data = await res.json();
 
     if (data.client) {
-      setClient(data.client);
+      setContact(data.client);
       setRequests(Array.isArray(data.requests) ? data.requests : []);
     }
   };
 
-  const saveClient = async (payload: {
+  const saveContact = async (payload: {
     first_name: string | null;
     last_name: string | null;
     address: string | null;
   }) => {
-    const res = await fetchApi(`/clients/${id}`, {
+    const res = await fetchApi(`/contacts/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -47,16 +47,16 @@ export default function ClientDetailPage() {
     if (!res.ok) throw new Error("save_failed");
 
     const data = await res.json();
-    if (data.client) setClient(data.client);
+    if (data.client) setContact(data.client);
   };
 
   useEffect(() => {
-    if (!roleLoading && role) fetchClient();
+    if (!roleLoading && role) fetchContact();
   }, [id, role, roleLoading]);
 
-  if (roleLoading || !client) {
+  if (roleLoading || !contact) {
     return (
-      <AuthenticatedShell activeNav="clients">
+      <AuthenticatedShell activeNav="contacts">
         <p>Chargement...</p>
       </AuthenticatedShell>
     );
@@ -78,16 +78,16 @@ export default function ClientDetailPage() {
   const doneCount = visibleRequests.filter((r) => r.status === "done").length;
 
   return (
-    <AuthenticatedShell activeNav="clients">
+    <AuthenticatedShell activeNav="contacts">
       <PageHeader
-        eyebrow="Fiche client"
-        title={displayClientName(client.first_name, client.last_name)}
-        description="Historique et informations de l'habitant."
+        eyebrow="Fiche contact"
+        title={displayClientName(contact.first_name, contact.last_name)}
+        description="Historique et informations du contact."
         actions={
           <>
-            <ClientEditForm client={client} onSave={saveClient} />
+            <ClientEditForm client={contact} onSave={saveContact} />
             <Link
-              href="/clients"
+              href="/contacts"
               className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-800 transition"
             >
               Retour
@@ -102,27 +102,35 @@ export default function ClientDetailPage() {
             <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
               Téléphone
             </p>
-            <p className="font-semibold mt-2">{client.phone}</p>
+            <p className="font-semibold mt-2">{contact.phone}</p>
           </div>
           <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4 md:col-span-2">
             <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
               Adresse
             </p>
             <p className="font-semibold mt-2">
-              {client.address || "Non renseignée"}
+              {contact.address || "Non renseignée"}
+            </p>
+          </div>
+          <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
+              Commune
+            </p>
+            <p className="font-semibold mt-2">
+              {contact.commune_name || "Non rattachée"}
             </p>
           </div>
           <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
               Créé le
             </p>
-            <p className="font-semibold mt-2">{formatDate(client.created_at)}</p>
+            <p className="font-semibold mt-2">{formatDate(contact.created_at)}</p>
           </div>
           <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
               Mis à jour
             </p>
-            <p className="font-semibold mt-2">{formatDate(client.updated_at)}</p>
+            <p className="font-semibold mt-2">{formatDate(contact.updated_at)}</p>
           </div>
           <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
