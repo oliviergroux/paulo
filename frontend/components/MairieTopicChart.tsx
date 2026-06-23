@@ -15,24 +15,21 @@ export default function MairieTopicChart({
   selectedSubtype,
   onSelectSubtype,
 }: MairieTopicChartProps) {
-  const activeRows = stats.filter((row) => row.activeCount > 0);
-  const maxCount = activeRows.reduce(
+  const maxCount = stats.reduce(
     (max, row) => Math.max(max, row.activeCount),
     0
   );
   const mostlyUnclassified =
-    activeTotal > 0 &&
-    activeRows.length === 1 &&
-    activeRows[0]?.subtype === "autre";
+    activeTotal > 0 && stats.length === 1 && stats[0]?.subtype === "autre";
 
-  if (activeTotal === 0) {
+  if (activeTotal === 0 || stats.length === 0) {
     return (
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <p className="text-sm font-semibold text-slate-900">
           Répartition par service municipal
         </p>
         <p className="text-sm text-slate-500 mt-1">
-          Voirie, propreté, eau / assainissement, administratif…
+          Nouveaux dossiers et dossiers en cours de traitement
         </p>
         <div className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-10 text-center">
           <p className="text-sm font-medium text-slate-700">
@@ -81,25 +78,17 @@ export default function MairieTopicChart({
 
       <div className="space-y-2">
         {stats.map((row) => {
-          const scale =
-            row.activeCount > 0 && maxCount > 0
-              ? (row.activeCount / maxCount) * 100
-              : 0;
-          const newWidth =
-            row.activeCount > 0 ? (row.newCount / row.activeCount) * 100 : 0;
+          const scale = maxCount > 0 ? (row.activeCount / maxCount) * 100 : 0;
+          const newWidth = (row.newCount / row.activeCount) * 100;
           const isSelected = selectedSubtype === row.subtype;
-          const isEmpty = row.activeCount === 0;
 
           return (
             <button
               key={row.subtype}
               type="button"
-              disabled={isEmpty}
               onClick={() => onSelectSubtype(row.subtype)}
               className={`w-full text-left rounded-2xl border px-4 py-3 transition ${
-                isEmpty
-                  ? "border-slate-100 bg-white opacity-50 cursor-default"
-                  : isSelected
+                isSelected
                   ? "border-violet-400 bg-violet-50 ring-2 ring-violet-100"
                   : "border-slate-100 bg-slate-50/70 hover:border-violet-200 hover:bg-violet-50/40"
               }`}
@@ -110,39 +99,33 @@ export default function MairieTopicChart({
                 </span>
                 <span className="text-sm font-bold text-slate-900 shrink-0">
                   {row.activeCount}
-                  {!isEmpty && (
-                    <span className="text-xs font-normal text-slate-500 ml-1.5">
-                      ({row.newCount} nouveau{row.newCount > 1 ? "x" : ""},{" "}
-                      {row.inProgressCount} en cours)
-                    </span>
-                  )}
+                  <span className="text-xs font-normal text-slate-500 ml-1.5">
+                    ({row.newCount} nouveau{row.newCount > 1 ? "x" : ""},{" "}
+                    {row.inProgressCount} en cours)
+                  </span>
                 </span>
               </div>
 
               <div className="h-3 rounded-full bg-slate-200/80 overflow-hidden">
-                {!isEmpty && (
-                  <div
-                    className="h-full flex"
-                    style={{
-                      width: `${Math.max(scale, 8)}%`,
-                    }}
-                  >
-                    {row.newCount > 0 && (
-                      <span
-                        className="h-full bg-amber-400"
-                        style={{ width: `${newWidth}%` }}
-                        title={`${row.newCount} nouveau(x)`}
-                      />
-                    )}
-                    {row.inProgressCount > 0 && (
-                      <span
-                        className="h-full bg-violet-600"
-                        style={{ width: `${100 - newWidth}%` }}
-                        title={`${row.inProgressCount} en cours`}
-                      />
-                    )}
-                  </div>
-                )}
+                <div
+                  className="h-full flex"
+                  style={{ width: `${Math.max(scale, 8)}%` }}
+                >
+                  {row.newCount > 0 && (
+                    <span
+                      className="h-full bg-amber-400"
+                      style={{ width: `${newWidth}%` }}
+                      title={`${row.newCount} nouveau(x)`}
+                    />
+                  )}
+                  {row.inProgressCount > 0 && (
+                    <span
+                      className="h-full bg-violet-600"
+                      style={{ width: `${100 - newWidth}%` }}
+                      title={`${row.inProgressCount} en cours`}
+                    />
+                  )}
+                </div>
               </div>
             </button>
           );

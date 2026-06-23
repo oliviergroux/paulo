@@ -53,7 +53,9 @@ export function computeMairieTopicStats(
       inProgressCount,
       activeCount: newCount + inProgressCount,
     };
-  });
+  })
+    .filter((row) => row.activeCount > 0)
+    .sort((a, b) => b.activeCount - a.activeCount);
 }
 
 export function countActiveMairieRequests(requests: RequestItem[]): number {
