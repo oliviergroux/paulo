@@ -3,6 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { SUBTYPES, subtypeLabel } from "@/lib/taxonomy";
+import {
+  PARTNER_FORM_SIRET_NOTICE,
+  PARTNER_FORM_VALIDATION_NOTICE,
+} from "@/content/partner-legal-fr";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://paulo-teal-nine.vercel.app";
@@ -46,6 +50,7 @@ export default function BecomePartnerPage() {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
 
   const selectedProfile =
     PROFILE_COPY[form.category as keyof typeof PROFILE_COPY];
@@ -113,6 +118,14 @@ export default function BecomePartnerPage() {
       return;
     }
 
+    if (!acceptedLegal) {
+      setError(
+        "Merci d’accepter les conditions et la politique de confidentialité pour continuer."
+      );
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/public/partners/apply", {
         method: "POST",
@@ -175,8 +188,8 @@ export default function BecomePartnerPage() {
                 ✅ Profil validé automatiquement
               </p>
               <p className="text-sm text-emerald-700 mt-2 leading-6">
-                Votre dossier a été vérifié via le registre SIRENE. Vous pouvez
-                recevoir des demandes dès maintenant.
+                Votre dossier a été vérifié auprès du registre officiel des
+                entreprises. Vous pouvez recevoir des demandes dès maintenant.
               </p>
             </div>
           ) : (
@@ -185,9 +198,10 @@ export default function BecomePartnerPage() {
                 ⏳ Validation en cours
               </p>
               <p className="text-sm text-orange-700 mt-2 leading-6">
-                Votre profil a bien été créé. Notre agent IA a analysé votre
-                dossier — l&apos;équipe Paulo confirmera sous peu si une
-                vérification complémentaire est nécessaire.
+                Votre profil a bien été créé. Nous vérifions la cohérence de
+                votre dossier — l&apos;équipe Paulo confirmera sous peu si une
+                vérification complémentaire est nécessaire. Vous pouvez contester
+                une décision en nous contactant.
               </p>
             </div>
           )}
@@ -266,8 +280,9 @@ export default function BecomePartnerPage() {
 
           <p className="text-slate-500 mt-3 max-w-2xl leading-7">
             Rejoignez le réseau Paulo et recevez les demandes pertinentes selon
-            votre activité. Chaque partenaire est validé manuellement pour
-            garantir un réseau fiable.
+            votre activité. Chaque partenaire est validé pour garantir un réseau
+            fiable — votre SIRET est contrôlé auprès du registre officiel des
+            entreprises.
           </p>
         </div>
 
@@ -317,6 +332,9 @@ export default function BecomePartnerPage() {
                 className="w-full border border-slate-200 rounded-2xl px-4 py-3"
                 placeholder="Ex : 12345678900012"
               />
+              <p className="text-xs text-slate-500 mt-2 leading-5">
+                {PARTNER_FORM_SIRET_NOTICE}
+              </p>
             </div>
 
             <div>
@@ -366,9 +384,44 @@ export default function BecomePartnerPage() {
 
             {error && <p className="text-red-600 text-sm">{error}</p>}
 
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 space-y-4">
+              <p className="text-xs text-slate-600 leading-5">
+                {PARTNER_FORM_VALIDATION_NOTICE}
+              </p>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={acceptedLegal}
+                  onChange={(e) => setAcceptedLegal(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                />
+                <span className="text-sm text-slate-700 leading-6">
+                  J&apos;accepte les{" "}
+                  <Link
+                    href="/legal/cgu-partenaires"
+                    className="font-semibold text-blue-600 hover:underline"
+                    target="_blank"
+                  >
+                    conditions générales partenaires
+                  </Link>{" "}
+                  et la{" "}
+                  <Link
+                    href="/legal/confidentialite-partenaires"
+                    className="font-semibold text-blue-600 hover:underline"
+                    target="_blank"
+                  >
+                    politique de confidentialité
+                  </Link>
+                  , et j&apos;autorise Paulo à vérifier mon SIRET auprès du
+                  registre public des entreprises.
+                </span>
+              </label>
+            </div>
+
             <button
               onClick={submit}
-              disabled={loading}
+              disabled={loading || !acceptedLegal}
               className="w-full bg-slate-950 hover:bg-slate-800 text-white px-5 py-3 rounded-2xl font-semibold disabled:bg-slate-400"
             >
               {loading ? "Envoi..." : "Créer mon profil partenaire"}
@@ -395,9 +448,10 @@ export default function BecomePartnerPage() {
               </div>
 
               <div className="rounded-3xl bg-white/10 border border-white/10 p-4">
-                <p className="font-semibold">2. Validation Paulo</p>
+                <p className="font-semibold">2. Vérification du dossier</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  Le profil est vérifié avant d’être activé.
+                  SIRET contrôlé via le registre officiel ; revue humaine si
+                  doute.
                 </p>
               </div>
 

@@ -18,6 +18,7 @@ import {
   getPartnersNeedingReview,
   getPriorityRequests,
 } from "@/lib/admin-stats";
+import { countUnanalyzedPartners } from "@/lib/partner-validation";
 import { formatDayLabel, isUrgentRequest } from "@/lib/format";
 import type { CommuneItem, PartnerDetail, RequestItem } from "@/lib/types";
 
@@ -26,6 +27,7 @@ export default function AdminDashboardPage() {
   const [partners, setPartners] = useState<PartnerDetail[]>([]);
   const [communes, setCommunes] = useState<CommuneItem[]>([]);
   const [actionId, setActionId] = useState<number | null>(null);
+  const [batchAnalyzing, setBatchAnalyzing] = useState(false);
 
   const fetchData = async () => {
     const [requestsRes, partnersRes, communesRes] = await Promise.all([
@@ -62,6 +64,7 @@ export default function AdminDashboardPage() {
   );
   const reviewPartners = getPartnersNeedingReview(partners);
   const reviewCount = countPartnersNeedingReview(partners);
+  const unanalyzedCount = countUnanalyzedPartners(partners);
   const activePartnerCount = countActivePartners(partners);
   const priorityRequests = getPriorityRequests(requests);
   const todayCount = requests.filter(
@@ -73,6 +76,16 @@ export default function AdminDashboardPage() {
   ).length;
   const urgentCount = requests.filter(isUrgentRequest).length;
   const activeCommunes = communes.filter((commune) => commune.is_active).length;
+
+  const analyzePendingPartners = async () => {
+    setBatchAnalyzing(true);
+    try {
+      await adminFetch("/partners/revalidate-pending", { method: "POST" });
+      await fetchData();
+    } finally {
+      setBatchAnalyzing(false);
+    }
+  };
 
   return (
     <AuthenticatedShell
@@ -154,16 +167,33 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-slate-500 mt-1">
                 {activePartnerCount} validé{activePartnerCount > 1 ? "s" : ""}
                 {reviewCount > 0
-                  ? ` · ${reviewCount} dossier${reviewCount > 1 ? "s" : ""} à confirmer (crédibilité IA)`
+                  ? ` · ${reviewCount} dossier${reviewCount > 1 ? "s" : ""} à confirmer`
                   : " · aucun dossier en attente"}
+                {unanalyzedCount > 0
+                  ? ` · ${unanalyzedCount} non analysé${unanalyzedCount > 1 ? "s" : ""}`
+                  : ""}
               </p>
             </div>
-            <Link
-              href="/partners"
-              className="rounded-xl bg-orange-600 text-white px-4 py-2 text-sm font-semibold hover:bg-orange-700 transition shrink-0"
-            >
-              Tous les partenaires
-            </Link>
+            <div className="flex flex-wrap gap-2 shrink-0">
+              {unanalyzedCount > 0 && (
+                <button
+                  type="button"
+                  disabled={batchAnalyzing}
+                  onClick={analyzePendingPartners}
+                  className="rounded-xl bg-slate-950 text-white px-4 py-2 text-sm font-semibold hover:bg-slate-800 transition disabled:opacity-60"
+                >
+                  {batchAnalyzing
+                    ? "Analyse en cours..."
+                    : `Analyser ${unanalyzedCount} dossier${unanalyzedCount > 1 ? "s" : ""}`}
+                </button>
+              )}
+              <Link
+                href="/partners"
+                className="rounded-xl bg-orange-600 text-white px-4 py-2 text-sm font-semibold hover:bg-orange-700 transition"
+              >
+                Tous les partenaires
+              </Link>
+            </div>
           </div>
 
           <DashboardPartnerReviewList

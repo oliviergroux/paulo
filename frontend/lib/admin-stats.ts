@@ -1,3 +1,4 @@
+import { isPartnerUnanalyzed } from "@/lib/partner-validation";
 import type { PartnerDetail, RequestItem } from "./types";
 import { CATEGORY_LABELS, SUBTYPES, subtypeLabel } from "./taxonomy";
 
@@ -162,11 +163,15 @@ export function getPartnersNeedingReview(
           partner.validation_status || "pending"
         )
     )
-    .sort(
-      (a, b) =>
+    .sort((a, b) => {
+      const aUnanalyzed = isPartnerUnanalyzed(a) ? 0 : 1;
+      const bUnanalyzed = isPartnerUnanalyzed(b) ? 0 : 1;
+      if (aUnanalyzed !== bUnanalyzed) return aUnanalyzed - bUnanalyzed;
+      return (
         Number(a.validation_confidence ?? 0) -
         Number(b.validation_confidence ?? 0)
-    )
+      );
+    })
     .slice(0, limit);
 }
 

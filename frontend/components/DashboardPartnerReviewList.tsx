@@ -4,8 +4,9 @@ import Link from "next/link";
 import CategoryBadge from "@/components/CategoryBadge";
 import { adminFetch } from "@/lib/api";
 import {
-  VALIDATION_STATUS_LABELS,
   formatConfidence,
+  getValidationStatusLabel,
+  isPartnerUnanalyzed,
   validationStatusClass,
 } from "@/lib/partner-validation";
 import type { PartnerDetail } from "@/lib/types";
@@ -30,6 +31,13 @@ export default function DashboardPartnerReviewList({
     setActionId(null);
   };
 
+  const revalidatePartner = async (partnerId: number) => {
+    setActionId(partnerId);
+    await adminFetch(`/partners/${partnerId}/revalidate`, { method: "POST" });
+    onUpdated();
+    setActionId(null);
+  };
+
   if (partners.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
@@ -48,6 +56,7 @@ export default function DashboardPartnerReviewList({
       {partners.map((partner) => {
         const report = partner.validation_report as { summary?: string } | null;
         const status = partner.validation_status || "pending";
+        const unanalyzed = isPartnerUnanalyzed(partner);
         const isBusy = actionId === partner.id;
 
         return (
@@ -69,11 +78,9 @@ export default function DashboardPartnerReviewList({
                     Crédibilité {formatConfidence(partner.validation_confidence)}
                   </span>
                   <span
-                    className={`text-xs font-bold px-3 py-1 rounded-full ${validationStatusClass(status)}`}
+                    className={`text-xs font-bold px-3 py-1 rounded-full ${validationStatusClass(status, partner)}`}
                   >
-                    {VALIDATION_STATUS_LABELS[
-                      status as keyof typeof VALIDATION_STATUS_LABELS
-                    ] || status}
+                    {getValidationStatusLabel(status, partner)}
                   </span>
                 </div>
               </div>
@@ -85,21 +92,39 @@ export default function DashboardPartnerReviewList({
                 />
               </div>
 
-              {report?.summary && (
-                <p className="text-sm text-slate-700 leading-6 line-clamp-3">
-                  {report.summary}
+              {unanalyzed ? (
+                <p className="text-sm text-slate-600 leading-6">
+                  Ce dossier date d&apos;avant l&apos;analyse automatique. Lancez
+                  l&apos;analyse pour obtenir un score de crédibilité.
                 </p>
+              ) : (
+                report?.summary && (
+                  <p className="text-sm text-slate-700 leading-6 line-clamp-3">
+                    {report.summary}
+                  </p>
+                )
               )}
 
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={isBusy}
-                  onClick={() => confirmValidation(partner.id)}
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
-                >
-                  {isBusy ? "Validation..." : "Confirmer"}
-                </button>
+                {unanalyzed ? (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => revalidatePartner(partner.id)}
+                    className="rounded-xl bg-slate-950 hover:bg-slate-800 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                  >
+                    {isBusy ? "Analyse..." : "Lancer l'analyse"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => confirmValidation(partner.id)}
+                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                  >
+                    {isBusy ? "Validation..." : "Confirmer"}
+                  </button>
+                )}
                 <Link
                   href="/partners"
                   className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"

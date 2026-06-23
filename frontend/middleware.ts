@@ -14,6 +14,7 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/api/") ||
     pathname.startsWith("/partner") ||
+    pathname.startsWith("/legal") ||
     pathname.startsWith("/_next") ||
     PUBLIC_PATHS.includes(pathname)
   ) {

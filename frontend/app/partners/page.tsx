@@ -11,7 +11,8 @@ import CommuneFilter from "@/components/CommuneFilter";
 import PartnerValidationPanel from "@/components/PartnerValidationPanel";
 import { adminFetch } from "@/lib/api";
 import {
-  VALIDATION_STATUS_LABELS,
+  formatConfidence,
+  getValidationStatusLabel,
   validationStatusClass,
 } from "@/lib/partner-validation";
 import { phoneTypeClass, phoneTypeLabel } from "@/lib/format";
@@ -78,15 +79,15 @@ export default function PartnersPage() {
     <AuthenticatedShell
       activeNav="partners"
       sidebarNote={{
-        title: "Validation IA + admin",
+        title: "Vérification dossiers",
         description:
-          "L'IA vérifie le SIRET via SIRENE et pré-valide. Vous confirmez si doute.",
+          "SIRET contrôlé via le registre officiel (data.gouv.fr). Confirmation admin en cas de doute.",
       }}
     >
       <PageHeader
         eyebrow="Admin partenaires"
         title="Validation partenaires"
-        description="L'IA vérifie SIRET, adresse et activité. Confirmation admin si doute."
+        description="Contrôle SIRET, adresse et activité via le registre public. Confirmation admin si doute."
         actions={
           <>
             <Link
@@ -193,12 +194,11 @@ export default function PartnersPage() {
                   {partner.validation_status && (
                     <span
                       className={`text-xs font-bold px-3 py-1 rounded-full ${validationStatusClass(
-                        partner.validation_status
+                        partner.validation_status,
+                        partner
                       )}`}
                     >
-                      {VALIDATION_STATUS_LABELS[
-                        partner.validation_status as keyof typeof VALIDATION_STATUS_LABELS
-                      ] || partner.validation_status}
+                      {getValidationStatusLabel(partner.validation_status, partner)}
                     </span>
                   )}
 

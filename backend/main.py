@@ -137,6 +137,50 @@ def assert_request_commune_access(
     if row["commune_id"] != commune_id:
         raise HTTPException(status_code=403, detail="forbidden_commune")
 
+
+def persist_partner_validation(cur, partner: dict, validation: dict):
+    if partner["is_active"]:
+        validation_status = "admin_validated"
+        is_active = True
+        set_validated_at = True
+    else:
+        validation_status = validation["validation_status"]
+        is_active = validation["is_active"]
+        set_validated_at = validation["auto_approved"]
+
+    cur.execute(
+        """
+        UPDATE partners
+        SET
+            validation_status = %s,
+            validation_confidence = %s,
+            validation_report = %s,
+            sirene_snapshot = %s,
+            is_active = %s,
+            validated_at = CASE WHEN %s THEN NOW() ELSE validated_at END
+        WHERE id = %s
+        RETURNING
+            id,
+            name,
+            is_active,
+            validation_status,
+            validation_confidence,
+            validation_report,
+            sirene_snapshot,
+            validated_at
+        """,
+        (
+            validation_status,
+            validation["validation_confidence"],
+            Json(validation["validation_report"]),
+            Json(validation["sirene_snapshot"]),
+            is_active,
+            set_validated_at,
+            partner["id"],
+        ),
+    )
+    return cur.fetchone()
+
 def normalize_french_phone(phone: str):
     if not phone:
         return None
@@ -1216,50 +1260,45 @@ def revalidate_partner(partner_id: int, _admin=Depends(require_admin)):
                 return {"ok": False, "error": "not_found"}
 
             validation = validate_partner_application(partner)
-
-            if partner["is_active"]:
-                validation_status = "admin_validated"
-                is_active = True
-                set_validated_at = True
-            else:
-                validation_status = validation["validation_status"]
-                is_active = validation["is_active"]
-                set_validated_at = validation["auto_approved"]
-
-            cur.execute(
-                """
-                UPDATE partners
-                SET
-                    validation_status = %s,
-                    validation_confidence = %s,
-                    validation_report = %s,
-                    sirene_snapshot = %s,
-                    is_active = %s,
-                    validated_at = CASE WHEN %s THEN NOW() ELSE validated_at END
-                WHERE id = %s
-                RETURNING
-                    id,
-                    name,
-                    is_active,
-                    validation_status,
-                    validation_confidence,
-                    validation_report,
-                    sirene_snapshot,
-                    validated_at
-                """,
-                (
-                    validation_status,
-                    validation["validation_confidence"],
-                    Json(validation["validation_report"]),
-                    Json(validation["sirene_snapshot"]),
-                    is_active,
-                    set_validated_at,
-                    partner_id,
-                ),
-            )
-            row = cur.fetchone()
+            row = persist_partner_validation(cur, partner, validation)
 
     return {"ok": True, "partner": row, "validation": validation}
+
+
+@app.post("/partners/revalidate-pending")
+def revalidate_pending_partners(_admin=Depends(require_admin)):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, name, siret, phone, category, subtype, address, is_active
+                FROM partners
+                WHERE validation_report IS NULL
+                   OR (
+                       validation_status = 'pending'
+                       AND validation_confidence IS NULL
+                   )
+                ORDER BY id ASC
+                """
+            )
+            partners = cur.fetchall()
+
+            updated = []
+            for partner in partners:
+                validation = validate_partner_application(partner)
+                row = persist_partner_validation(cur, partner, validation)
+                updated.append(
+                    {
+                        "id": row["id"],
+                        "name": row["name"],
+                        "validation_status": row["validation_status"],
+                        "validation_confidence": row["validation_confidence"],
+                    }
+                )
+
+        conn.commit()
+
+    return {"ok": True, "processed": len(updated), "partners": updated}
 
 
 @app.post("/partners/{partner_id}/deactivate")

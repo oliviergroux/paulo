@@ -4,6 +4,8 @@ import type { PartnerDetail } from "@/lib/types";
 import {
   VALIDATION_STATUS_LABELS,
   formatConfidence,
+  getValidationStatusLabel,
+  isPartnerUnanalyzed,
   validationStatusClass,
   type PartnerValidationReport,
 } from "@/lib/partner-validation";
@@ -45,10 +47,9 @@ export default function PartnerValidationPanel({
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm font-semibold text-slate-900">Analyse IA partenaire</p>
         <span
-          className={`text-xs font-bold px-3 py-1 rounded-full ${validationStatusClass(status)}`}
+          className={`text-xs font-bold px-3 py-1 rounded-full ${validationStatusClass(status, partner)}`}
         >
-          {VALIDATION_STATUS_LABELS[status as keyof typeof VALIDATION_STATUS_LABELS] ||
-            status}
+          {getValidationStatusLabel(status, partner)}
         </span>
         {partner.validation_confidence != null && (
           <span className="text-xs text-slate-500">
@@ -56,6 +57,13 @@ export default function PartnerValidationPanel({
           </span>
         )}
       </div>
+
+      {isPartnerUnanalyzed(partner) && (
+        <p className="text-sm text-slate-600 leading-6">
+          Aucune analyse n&apos;a encore été lancée pour ce dossier. Utilisez
+          « Relancer l&apos;analyse » pour interroger le registre SIRENE.
+        </p>
+      )}
 
       {report.summary && (
         <p className="text-sm text-slate-700 leading-6">{report.summary}</p>
