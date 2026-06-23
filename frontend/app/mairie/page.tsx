@@ -6,6 +6,7 @@ import AuthenticatedShell from "@/components/AuthenticatedShell";
 import DayDivider from "@/components/DayDivider";
 import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
+import MairieTopicChart from "@/components/MairieTopicChart";
 import PageHeader from "@/components/PageHeader";
 import RequestCard from "@/components/RequestCard";
 import RequestWorkflow from "@/components/RequestWorkflow";
@@ -17,6 +18,10 @@ import {
   isMairieRequest,
 } from "@/lib/format";
 import { MAIRIE_SERVICES, mairieServiceOptions } from "@/lib/taxonomy";
+import {
+  computeMairieTopicStats,
+  countActiveMairieRequests,
+} from "@/lib/mairie-stats";
 import type { RequestItem } from "@/lib/types";
 
 const SERVICE_OPTIONS = mairieServiceOptions();
@@ -38,6 +43,17 @@ export default function MairiePage() {
   const isFirstLoadRef = useRef(true);
 
   const mairieRequests = requests.filter(isMairieRequest);
+  const topicStats = computeMairieTopicStats(mairieRequests);
+  const activeMairieCount = countActiveMairieRequests(mairieRequests);
+
+  const handleTopicSelect = (subtype: string) => {
+    setSubtypeFilter((current) => (current === subtype ? "all" : subtype));
+    setStatusFilter("all");
+    setQuickFilters((prev) => ({
+      ...prev,
+      done: false,
+    }));
+  };
 
   const toggleQuickFilter = (key: keyof typeof quickFilters) => {
     setQuickFilters((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -265,6 +281,15 @@ export default function MairiePage() {
             Types de demandes distincts (IA)
           </p>
         </div>
+      </div>
+
+      <div className="mb-8">
+        <MairieTopicChart
+          stats={topicStats}
+          activeTotal={activeMairieCount}
+          selectedSubtype={subtypeFilter === "all" ? undefined : subtypeFilter}
+          onSelectSubtype={handleTopicSelect}
+        />
       </div>
 
       <div className="mb-8 rounded-3xl bg-white border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row gap-3 md:items-center">
