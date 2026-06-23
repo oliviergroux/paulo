@@ -515,11 +515,12 @@ def assign_request_service(
                 UPDATE requests
                 SET assigned_to = %s,
                     assigned_service = %s,
+                    subtype = %s,
                     assigned_partner_id = NULL
                 WHERE id = %s
-                RETURNING id, assigned_service
+                RETURNING id, assigned_service, subtype
                 """,
-                ("service", service, request_id),
+                ("service", service, service, request_id),
             )
             row = cur.fetchone()
 

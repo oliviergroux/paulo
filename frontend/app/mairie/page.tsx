@@ -21,6 +21,8 @@ import { MAIRIE_SERVICES, mairieServiceOptions } from "@/lib/taxonomy";
 import {
   computeMairieTopicStats,
   countActiveMairieRequests,
+  countActiveMairieTopics,
+  resolveMairieTopic,
 } from "@/lib/mairie-stats";
 import type { RequestItem } from "@/lib/types";
 
@@ -82,14 +84,12 @@ export default function MairiePage() {
   ).length;
   const uniqueResidents = new Set(mairieRequests.map((r) => r.phone)).size;
   const avgHours = averageHandlingHours(mairieRequests);
-  const topicCount = new Set(
-    mairieRequests.map((r) => r.subtype?.trim().toLowerCase()).filter(Boolean)
-  ).size;
+  const topicCount = countActiveMairieTopics(topicStats);
 
   const filteredRequests = mairieRequests
     .filter((req) => (statusFilter === "all" ? true : req.status === statusFilter))
     .filter((req) =>
-      subtypeFilter === "all" ? true : req.subtype === subtypeFilter
+      subtypeFilter === "all" ? true : resolveMairieTopic(req) === subtypeFilter
     )
     .filter((req) =>
       quickFilters.today ? formatDayLabel(req.created_at) === "Aujourd’hui" : true
@@ -275,10 +275,10 @@ export default function MairiePage() {
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Sujets détectés</p>
+          <p className="text-sm text-slate-500">Services actifs</p>
           <p className="text-3xl font-bold mt-2 text-slate-950">{topicCount}</p>
           <p className="text-xs text-slate-400 mt-1">
-            Types de demandes distincts (IA)
+            Services municipaux concernés (dossiers actifs)
           </p>
         </div>
       </div>
@@ -354,7 +354,7 @@ export default function MairiePage() {
                         assignMode="service"
                         assignOptions={SERVICE_OPTIONS}
                         selectedAssignId={
-                          selectedServices[req.id] || req.subtype || ""
+                          selectedServices[req.id] || resolveMairieTopic(req)
                         }
                         onSelectAssign={(serviceId) =>
                           setSelectedServices((prev) => ({

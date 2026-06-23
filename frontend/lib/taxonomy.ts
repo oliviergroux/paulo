@@ -100,6 +100,31 @@ export function mairieServiceOptions() {
   }));
 }
 
+const MAIRIE_TOPIC_ALIASES: Record<string, (typeof MAIRIE_SERVICES)[number]> = {
+  mairie: "autre",
+  assainissement: "eau_assainissement",
+  eau: "eau_assainissement",
+  dechets: "proprete",
+  decheterie: "proprete",
+  lampadaire: "eclairage",
+  etat_civil: "administratif",
+};
+
+export function normalizeMairieTopicKey(
+  raw?: string | null
+): (typeof MAIRIE_SERVICES)[number] | null {
+  if (!raw?.trim()) return null;
+
+  const key = raw.trim().toLowerCase().replace(/ /g, "_").replace(/-/g, "_");
+  const normalized = MAIRIE_TOPIC_ALIASES[key] || key;
+
+  if ((MAIRIE_SERVICES as readonly string[]).includes(normalized)) {
+    return normalized as (typeof MAIRIE_SERVICES)[number];
+  }
+
+  return null;
+}
+
 export const CATEGORY_LABELS: Record<string, string> = {
   commerce: "Commerce",
   service_local: "Service local",
