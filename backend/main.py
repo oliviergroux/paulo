@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from psycopg2.extras import RealDictCursor, Json
 from openai import OpenAI
 from twilio.rest import Client as TwilioClient
-from typing import Optional
+from typing import Any, Optional
 
 import os
 import json
@@ -158,20 +158,60 @@ def persist_partner_validation(cur, partner: dict, validation: dict):
         is_active = validation["is_active"]
         set_validated_at = validation["auto_approved"]
 
+    canonical = validation.get("canonical_fields") or {}
+    if validation_status == "rejected":
+        canonical = {}
+
+    set_clauses = [
+        "validation_status = %s",
+        "validation_confidence = %s",
+        "validation_report = %s",
+        "sirene_snapshot = %s",
+        "is_active = %s",
+        "validated_at = CASE WHEN %s THEN NOW() ELSE validated_at END",
+    ]
+    params: list[Any] = [
+        validation_status,
+        validation["validation_confidence"],
+        Json(validation["validation_report"]),
+        Json(validation["sirene_snapshot"]),
+        is_active,
+        set_validated_at,
+    ]
+
+    if canonical.get("name"):
+        set_clauses.append("name = %s")
+        params.append(canonical["name"])
+    if canonical.get("address"):
+        set_clauses.append("address = %s")
+        params.append(canonical["address"])
+    if canonical.get("postal_code"):
+        set_clauses.append("postal_code = %s")
+        params.append(canonical["postal_code"])
+    if canonical.get("city"):
+        set_clauses.append("city = %s")
+        params.append(canonical["city"])
+    if canonical:
+        commune_id = resolve_commune_id_for_partner(
+            canonical.get("address") or partner.get("address") or "",
+            postal_code=canonical.get("postal_code") or partner.get("postal_code"),
+        )
+        if commune_id is not None:
+            set_clauses.append("commune_id = %s")
+            params.append(commune_id)
+
+    params.append(partner["id"])
+
     cur.execute(
-        """
+        f"""
         UPDATE partners
         SET
-            validation_status = %s,
-            validation_confidence = %s,
-            validation_report = %s,
-            sirene_snapshot = %s,
-            is_active = %s,
-            validated_at = CASE WHEN %s THEN NOW() ELSE validated_at END
+            {", ".join(set_clauses)}
         WHERE id = %s
         RETURNING
             id,
             name,
+            access_token,
             is_active,
             validation_status,
             validation_confidence,
@@ -179,15 +219,7 @@ def persist_partner_validation(cur, partner: dict, validation: dict):
             sirene_snapshot,
             validated_at
         """,
-        (
-            validation_status,
-            validation["validation_confidence"],
-            Json(validation["validation_report"]),
-            Json(validation["sirene_snapshot"]),
-            is_active,
-            set_validated_at,
-            partner["id"],
-        ),
+        tuple(params),
     )
     return cur.fetchone()
 
@@ -1189,31 +1221,9 @@ def create_partner_application(partner: PartnerCreate):
             partner_id = new_partner["id"]
 
             validation = validate_partner_application(partner_payload)
-
-            cur.execute(
-                """
-                UPDATE partners
-                SET
-                    validation_status = %s,
-                    validation_confidence = %s,
-                    validation_report = %s,
-                    sirene_snapshot = %s,
-                    is_active = %s,
-                    validated_at = CASE WHEN %s THEN NOW() ELSE NULL END
-                WHERE id = %s
-                RETURNING id, name, access_token, is_active, validation_status, validation_confidence
-                """,
-                (
-                    validation["validation_status"],
-                    validation["validation_confidence"],
-                    Json(validation["validation_report"]),
-                    Json(validation["sirene_snapshot"]),
-                    validation["is_active"],
-                    validation["auto_approved"],
-                    partner_id,
-                ),
-            )
-            new_partner = cur.fetchone()
+            partner_row["id"] = partner_id
+            partner_row["is_active"] = False
+            new_partner = persist_partner_validation(cur, partner_row, validation)
 
     return {
         "ok": True,
