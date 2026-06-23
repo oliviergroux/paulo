@@ -81,13 +81,25 @@ class PartnerUpdate(BaseModel):
 class CommuneCreate(BaseModel):
     name: str = Field(..., min_length=2)
     postal_code: str = Field(..., min_length=4)
-    department: Optional[str] = None
+    department_code: Optional[str] = None
+    department_label: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    insee_code: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class CommuneUpdate(BaseModel):
     name: Optional[str] = None
     postal_code: Optional[str] = None
-    department: Optional[str] = None
+    department_code: Optional[str] = None
+    department_label: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    insee_code: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     is_active: Optional[bool] = None
 
 
@@ -463,7 +475,13 @@ def get_communes(_admin=Depends(require_admin)):
                     cm.id,
                     cm.name,
                     cm.postal_code,
-                    cm.department,
+                    cm.department_code,
+                    cm.department_label,
+                    cm.email,
+                    cm.phone,
+                    cm.insee_code,
+                    cm.latitude,
+                    cm.longitude,
                     cm.is_active,
                     cm.created_at,
                     COUNT(DISTINCT r.id) AS total_requests,
@@ -480,7 +498,13 @@ def get_communes(_admin=Depends(require_admin)):
                     cm.id,
                     cm.name,
                     cm.postal_code,
-                    cm.department,
+                    cm.department_code,
+                    cm.department_label,
+                    cm.email,
+                    cm.phone,
+                    cm.insee_code,
+                    cm.latitude,
+                    cm.longitude,
                     cm.is_active,
                     cm.created_at
                 ORDER BY cm.name ASC
@@ -491,18 +515,59 @@ def get_communes(_admin=Depends(require_admin)):
 
 @app.post("/communes")
 def create_commune(payload: CommuneCreate, _admin=Depends(require_admin)):
+    normalized_phone = (
+        normalize_french_phone(payload.phone) if payload.phone else None
+    )
+    email = payload.email.strip() if payload.email else None
+    department_code = (
+        payload.department_code.strip().upper() if payload.department_code else None
+    )
+    department_label = (
+        payload.department_label.strip() if payload.department_label else None
+    )
+    insee_code = payload.insee_code.strip() if payload.insee_code else None
+
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                INSERT INTO communes (name, postal_code, department, is_active)
-                VALUES (%s, %s, %s, true)
-                RETURNING id, name, postal_code, department, is_active, created_at
+                INSERT INTO communes (
+                    name,
+                    postal_code,
+                    department_code,
+                    department_label,
+                    email,
+                    phone,
+                    insee_code,
+                    latitude,
+                    longitude,
+                    is_active
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, true)
+                RETURNING
+                    id,
+                    name,
+                    postal_code,
+                    department_code,
+                    department_label,
+                    email,
+                    phone,
+                    insee_code,
+                    latitude,
+                    longitude,
+                    is_active,
+                    created_at
                 """,
                 (
                     payload.name.strip(),
                     payload.postal_code.strip(),
-                    payload.department.strip() if payload.department else None,
+                    department_code,
+                    department_label,
+                    email or None,
+                    normalized_phone,
+                    insee_code or None,
+                    payload.latitude,
+                    payload.longitude,
                 ),
             )
             row = cur.fetchone()
@@ -525,9 +590,35 @@ def update_commune(
         fields.append("postal_code = %s")
         values.append(payload.postal_code.strip())
 
-    if payload.department is not None:
-        fields.append("department = %s")
-        values.append(payload.department.strip() or None)
+    if payload.department_code is not None:
+        fields.append("department_code = %s")
+        values.append(payload.department_code.strip().upper() or None)
+
+    if payload.department_label is not None:
+        fields.append("department_label = %s")
+        values.append(payload.department_label.strip() or None)
+
+    if payload.email is not None:
+        fields.append("email = %s")
+        values.append(payload.email.strip() or None)
+
+    if payload.phone is not None:
+        fields.append("phone = %s")
+        values.append(
+            normalize_french_phone(payload.phone) if payload.phone.strip() else None
+        )
+
+    if payload.insee_code is not None:
+        fields.append("insee_code = %s")
+        values.append(payload.insee_code.strip() or None)
+
+    if payload.latitude is not None:
+        fields.append("latitude = %s")
+        values.append(payload.latitude)
+
+    if payload.longitude is not None:
+        fields.append("longitude = %s")
+        values.append(payload.longitude)
 
     if payload.is_active is not None:
         fields.append("is_active = %s")
@@ -545,7 +636,19 @@ def update_commune(
                 UPDATE communes
                 SET {", ".join(fields)}
                 WHERE id = %s
-                RETURNING id, name, postal_code, department, is_active, created_at
+                RETURNING
+                    id,
+                    name,
+                    postal_code,
+                    department_code,
+                    department_label,
+                    email,
+                    phone,
+                    insee_code,
+                    latitude,
+                    longitude,
+                    is_active,
+                    created_at
                 """,
                 values,
             )

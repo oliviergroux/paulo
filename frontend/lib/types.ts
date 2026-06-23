@@ -46,7 +46,13 @@ export type CommuneItem = {
   id: number;
   name: string;
   postal_code: string;
-  department?: string | null;
+  department_code?: string | null;
+  department_label?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  insee_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   is_active: boolean;
   created_at?: string;
   total_requests?: number;

@@ -22,10 +22,77 @@ def ensure_schema():
                     id SERIAL PRIMARY KEY,
                     name VARCHAR(128) NOT NULL,
                     postal_code VARCHAR(10) NOT NULL,
-                    department VARCHAR(64),
+                    department_code VARCHAR(5),
+                    department_label VARCHAR(128),
+                    email VARCHAR(255),
+                    phone VARCHAR(32),
+                    insee_code VARCHAR(5),
+                    latitude DOUBLE PRECISION,
+                    longitude DOUBLE PRECISION,
                     is_active BOOLEAN NOT NULL DEFAULT true,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE communes
+                ADD COLUMN IF NOT EXISTS department_code VARCHAR(5)
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE communes
+                ADD COLUMN IF NOT EXISTS department_label VARCHAR(128)
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE communes
+                ADD COLUMN IF NOT EXISTS email VARCHAR(255)
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE communes
+                ADD COLUMN IF NOT EXISTS phone VARCHAR(32)
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE communes
+                ADD COLUMN IF NOT EXISTS insee_code VARCHAR(5)
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE communes
+                ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE communes
+                ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION
+                """
+            )
+            cur.execute(
+                """
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_name = 'communes'
+                          AND column_name = 'department'
+                    ) THEN
+                        UPDATE communes
+                        SET department_label = department
+                        WHERE department IS NOT NULL
+                          AND department_label IS NULL;
+                        ALTER TABLE communes DROP COLUMN department;
+                    END IF;
+                END $$;
                 """
             )
             cur.execute(
@@ -42,8 +109,8 @@ def ensure_schema():
             )
             cur.execute(
                 """
-                INSERT INTO communes (name, postal_code, department, is_active)
-                SELECT 'Commune pilote', '00000', NULL, true
+                INSERT INTO communes (name, postal_code, is_active)
+                SELECT 'Commune pilote', '00000', true
                 WHERE NOT EXISTS (SELECT 1 FROM communes)
                 """
             )
