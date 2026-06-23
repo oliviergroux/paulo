@@ -2,12 +2,12 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import AppShell from "@/components/AppShell";
+import AuthenticatedShell from "@/components/AuthenticatedShell";
 import DayDivider from "@/components/DayDivider";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
-import RequestActionsAdmin from "@/components/RequestActionsAdmin";
 import RequestCard from "@/components/RequestCard";
+import RequestWorkflow, { matchingPartners } from "@/components/RequestWorkflow";
 import { adminFetch } from "@/lib/api";
 import { formatDayLabel, isUrgentRequest } from "@/lib/format";
 import type { PartnerSummary, RequestItem } from "@/lib/types";
@@ -165,7 +165,7 @@ export default function Home() {
   }, []);
 
   return (
-    <AppShell
+    <AuthenticatedShell
       activeNav="dashboard"
       sidebarNote={{
         title: "Live monitoring",
@@ -290,11 +290,12 @@ export default function Home() {
                     request={req}
                     highlighted={highlightedIds.includes(req.id)}
                     actions={
-                      <RequestActionsAdmin
+                      <RequestWorkflow
                         request={req}
-                        partners={partners}
-                        selectedPartnerId={selectedPartners[req.id]}
-                        onSelectPartner={(partnerId) =>
+                        variant="admin"
+                        assignOptions={matchingPartners(req, partners)}
+                        selectedAssignId={selectedPartners[req.id]}
+                        onSelectAssign={(partnerId) =>
                           setSelectedPartners((prev) => ({
                             ...prev,
                             [req.id]: partnerId,
@@ -312,6 +313,6 @@ export default function Home() {
             </React.Fragment>
           ))}
       </div>
-    </AppShell>
+    </AuthenticatedShell>
   );
 }

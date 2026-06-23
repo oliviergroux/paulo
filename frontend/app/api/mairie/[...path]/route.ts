@@ -8,15 +8,33 @@ type RouteContext = {
   params: Promise<{ path: string[] }>;
 };
 
-async function proxyAdminRequest(request: NextRequest, pathSegments: string[]) {
+const BLOCKED_FOR_MAIRIE = [
+  /^\/partners\/\d+\/(activate|deactivate)$/,
+  /^\/partners\/apply$/,
+];
+
+function isPathAllowedForMairie(method: string, path: string): boolean {
+  if (method === "PATCH" && path.startsWith("/partners/")) return false;
+  if (method === "POST" && BLOCKED_FOR_MAIRIE.some((pattern) => pattern.test(path))) {
+    return false;
+  }
+  return true;
+}
+
+async function proxyMairieRequest(request: NextRequest, pathSegments: string[]) {
   const cookieStore = await cookies();
   const role = await getSessionRole(cookieStore.get(SESSION_COOKIE)?.value);
 
-  if (role !== "admin") {
+  if (role !== "admin" && role !== "mairie") {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const backendPath = `/${pathSegments.join("/")}`;
+
+  if (role === "mairie" && !isPathAllowedForMairie(request.method, backendPath)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
   const url = new URL(`${getBackendUrl()}${backendPath}`);
 
   request.nextUrl.searchParams.forEach((value, key) => {
@@ -54,25 +72,15 @@ async function proxyAdminRequest(request: NextRequest, pathSegments: string[]) {
 
 export async function GET(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
-  return proxyAdminRequest(request, path);
+  return proxyMairieRequest(request, path);
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
-  return proxyAdminRequest(request, path);
-}
-
-export async function PUT(request: NextRequest, context: RouteContext) {
-  const { path } = await context.params;
-  return proxyAdminRequest(request, path);
+  return proxyMairieRequest(request, path);
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
-  return proxyAdminRequest(request, path);
-}
-
-export async function DELETE(request: NextRequest, context: RouteContext) {
-  const { path } = await context.params;
-  return proxyAdminRequest(request, path);
+  return proxyMairieRequest(request, path);
 }

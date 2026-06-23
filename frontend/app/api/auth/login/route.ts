@@ -5,18 +5,23 @@ import {
   SESSION_COOKIE,
   SESSION_MAX_AGE,
   createSessionToken,
-  verifyAdminPassword,
+  resolveRoleFromPassword,
 } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const password = body?.password;
 
-  if (typeof password !== "string" || !verifyAdminPassword(password)) {
+  if (typeof password !== "string") {
     return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
   }
 
-  const token = await createSessionToken();
+  const role = resolveRoleFromPassword(password);
+  if (!role) {
+    return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+  }
+
+  const token = await createSessionToken(role);
   const cookieStore = await cookies();
 
   cookieStore.set(SESSION_COOKIE, token, {
@@ -27,5 +32,5 @@ export async function POST(request: NextRequest) {
     maxAge: SESSION_MAX_AGE,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, role });
 }

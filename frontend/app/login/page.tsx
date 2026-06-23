@@ -3,11 +3,12 @@
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { defaultPathForRole, type UserRole } from "@/lib/auth";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") || "/";
+  const nextPath = searchParams.get("next");
 
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,13 +25,23 @@ function LoginForm() {
       body: JSON.stringify({ password }),
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
       setError("Mot de passe incorrect.");
       setLoading(false);
       return;
     }
 
-    router.push(nextPath);
+    const role = data.role as UserRole;
+    const destination =
+      nextPath && !nextPath.startsWith("/login")
+        ? role === "mairie" && (nextPath === "/" || nextPath.startsWith("/partners"))
+          ? "/mairie"
+          : nextPath
+        : defaultPathForRole(role);
+
+    router.push(destination);
     router.refresh();
   };
 
@@ -43,7 +54,7 @@ function LoginForm() {
           </div>
           <div>
             <p className="font-semibold text-xl text-slate-950">Paulo</p>
-            <p className="text-sm text-slate-500">Accès administration</p>
+            <p className="text-sm text-slate-500">Connexion admin ou mairie</p>
           </div>
         </div>
 
@@ -61,10 +72,15 @@ function LoginForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm"
-              placeholder="Entrez le mot de passe admin"
+              placeholder="Mot de passe admin ou mairie"
               required
             />
           </div>
+
+          <p className="text-xs text-slate-400 leading-5">
+            Le mot de passe utilisé détermine automatiquement votre espace
+            (administration ou mairie).
+          </p>
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-2xl px-4 py-3">

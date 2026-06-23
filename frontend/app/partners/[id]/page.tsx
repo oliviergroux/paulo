@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import AppShell from "@/components/AppShell";
+import AuthenticatedShell from "@/components/AuthenticatedShell";
 import CategoryBadge from "@/components/CategoryBadge";
 import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
+import PartnerEditForm from "@/components/PartnerEditForm";
 import RequestCard from "@/components/RequestCard";
 import StatusBadge from "@/components/StatusBadge";
 import { adminFetch } from "@/lib/api";
@@ -33,6 +34,26 @@ export default function PartnerDetailPage() {
     if (Array.isArray(data)) setRequests(data);
   };
 
+  const savePartner = async (payload: {
+    name: string;
+    siret: string;
+    phone: string;
+    address: string;
+    category: string;
+    subtype: string;
+  }) => {
+    const res = await adminFetch(`/partners/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) throw new Error("save_failed");
+
+    const data = await res.json();
+    if (data.partner) setPartner(data.partner);
+  };
+
   useEffect(() => {
     fetchPartner();
     fetchRequests();
@@ -40,9 +61,9 @@ export default function PartnerDetailPage() {
 
   if (!partner) {
     return (
-      <AppShell activeNav="partners">
+      <AuthenticatedShell activeNav="partners">
         <p>Chargement...</p>
-      </AppShell>
+      </AuthenticatedShell>
     );
   }
 
@@ -55,24 +76,19 @@ export default function PartnerDetailPage() {
   const doneCount = requests.filter((r) => r.status === "done").length;
 
   return (
-    <AppShell activeNav="partners">
+    <AuthenticatedShell activeNav="partners">
       <PageHeader
         eyebrow="Fiche partenaire"
         title={partner.name}
         description="Vue admin du partenaire et de ses demandes assignées."
         actions={
           <>
+            <PartnerEditForm partner={partner} onSave={savePartner} />
             <Link
               href="/partners"
               className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-800 transition"
             >
               Retour partenaires
-            </Link>
-            <Link
-              href="/"
-              className="rounded-2xl bg-white border border-slate-200 text-slate-700 px-5 py-3 text-sm font-semibold hover:bg-slate-50 transition"
-            >
-              Retour demandes
             </Link>
             <Link
               href={`/partner?partner_id=${partner.id}&token=${partner.access_token || ""}`}
@@ -192,6 +208,6 @@ export default function PartnerDetailPage() {
           <EmptyState message="Aucune demande pour ce filtre." />
         )}
       </div>
-    </AppShell>
+    </AuthenticatedShell>
   );
 }

@@ -1,18 +1,17 @@
-export const SESSION_COOKIE = "paulo_admin";
+export const SESSION_COOKIE = "paulo_session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 
-function getAdminSecret(): string {
-  const secret = process.env.ADMIN_PASSWORD;
-  if (!secret) {
-    throw new Error("ADMIN_PASSWORD is not configured");
-  }
-  return secret;
+export type UserRole = "admin" | "mairie";
+
+function secretForRole(role: UserRole): string | null {
+  if (role === "admin") return process.env.ADMIN_PASSWORD || null;
+  return process.env.MAIRIE_PASSWORD || null;
 }
 
-async function signPayload(payload: string): Promise<string> {
+async function signPayload(payload: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(getAdminSecret()),
+    new TextEncoder().encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
@@ -38,56 +37,59 @@ function safeEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
-export async function createSessionToken(): Promise<string> {
+export async function createSessionToken(role: UserRole): Promise<string> {
+  const secret = secretForRole(role);
+  if (!secret) {
+    throw new Error(`${role} password is not configured`);
+  }
+
   const expiresAt = Date.now() + SESSION_MAX_AGE * 1000;
-  const payload = `admin:${expiresAt}`;
-  return `${payload}.${await signPayload(payload)}`;
+  const payload = `${role}:${expiresAt}`;
+  return `${payload}.${await signPayload(payload, secret)}`;
 }
 
-export async function verifySessionToken(
+export async function getSessionRole(
   token: string | undefined
-): Promise<boolean> {
-  if (!token) return false;
-
-  const secret = process.env.ADMIN_PASSWORD;
-  if (!secret) return false;
+): Promise<UserRole | null> {
+  if (!token) return null;
 
   const [payload, signature] = token.split(".");
-  if (!payload || !signature) return false;
+  if (!payload || !signature) return null;
 
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
+  const [roleRaw, expiresRaw] = payload.split(":");
+  if (roleRaw !== "admin" && roleRaw !== "mairie") return null;
 
-  const expectedBuffer = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(payload)
-  );
+  const role = roleRaw as UserRole;
+  const secret = secretForRole(role);
+  if (!secret) return null;
 
-  const expected = Array.from(new Uint8Array(expectedBuffer))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  const expected = await signPayload(payload, secret);
+  if (!safeEqual(signature, expected)) return null;
 
-  if (!safeEqual(signature, expected)) {
-    return false;
-  }
-
-  const [, expiresRaw] = payload.split(":");
   const expiresAt = Number(expiresRaw);
-  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
-    return false;
-  }
+  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return null;
 
-  return true;
+  return role;
 }
 
-export function verifyAdminPassword(password: string): boolean {
-  const expected = process.env.ADMIN_PASSWORD;
-  if (!expected) return false;
-  return safeEqual(password, expected);
+export function resolveRoleFromPassword(password: string): UserRole | null {
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  const mairiePassword = process.env.MAIRIE_PASSWORD;
+
+  if (adminPassword && safeEqual(password, adminPassword)) return "admin";
+  if (mairiePassword && safeEqual(password, mairiePassword)) return "mairie";
+  return null;
+}
+
+export const ADMIN_ONLY_PATHS = ["/", "/partners", "/devenir-partenaire"];
+
+export function isAdminOnlyPath(pathname: string): boolean {
+  if (pathname === "/") return true;
+  if (pathname.startsWith("/partners")) return true;
+  if (pathname === "/devenir-partenaire") return true;
+  return false;
+}
+
+export function defaultPathForRole(role: UserRole): string {
+  return role === "mairie" ? "/mairie" : "/";
 }

@@ -6,6 +6,14 @@ export async function adminFetch(path: string, init?: RequestInit) {
   });
 }
 
+export async function mairieFetch(path: string, init?: RequestInit) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return fetch(`/api/mairie${normalizedPath}`, {
+    ...init,
+    cache: "no-store",
+  });
+}
+
 export async function partnerFetch(
   path: string,
   token: string,

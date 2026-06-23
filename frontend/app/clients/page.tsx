@@ -2,27 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import AppShell from "@/components/AppShell";
+import AuthenticatedShell, { useRoleFetch } from "@/components/AuthenticatedShell";
 import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
-import { adminFetch } from "@/lib/api";
 import { displayClientName, formatDate } from "@/lib/format";
 import type { ClientItem } from "@/lib/types";
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [search, setSearch] = useState("");
+  const { role, loading: roleLoading, fetchApi } = useRoleFetch();
 
   const fetchClients = async () => {
-    const res = await adminFetch("/clients");
+    const res = await fetchApi("/clients");
     const data = await res.json();
     setClients(Array.isArray(data) ? data : []);
   };
 
   useEffect(() => {
-    fetchClients();
-  }, []);
+    if (!roleLoading && role) fetchClients();
+  }, [role, roleLoading]);
 
   const filteredClients = clients.filter((client) => {
     const fullName = [client.first_name, client.last_name]
@@ -45,33 +45,42 @@ export default function ClientsPage() {
   );
 
   return (
-    <AppShell
+    <AuthenticatedShell
       activeNav="clients"
       sidebarNote={{
-        title: "CRM habitants",
+        title: role === "mairie" ? "Habitants" : "CRM habitants",
         description:
           "Fiches créées automatiquement depuis les appels et WhatsApp.",
       }}
     >
       <PageHeader
-        eyebrow="CRM local"
-        title="Clients"
+        eyebrow={role === "mairie" ? "Collectivité" : "CRM local"}
+        title={role === "mairie" ? "Habitants" : "Clients"}
         description="Fiches clients créées automatiquement depuis les appels et WhatsApp."
         actions={
-          <>
+          role === "admin" ? (
+            <>
+              <Link
+                href="/"
+                className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-800 transition"
+              >
+                Retour demandes
+              </Link>
+              <Link
+                href="/partners"
+                className="rounded-2xl bg-white border border-slate-200 text-slate-700 px-5 py-3 text-sm font-semibold hover:bg-slate-50 transition"
+              >
+                Partenaires
+              </Link>
+            </>
+          ) : (
             <Link
-              href="/"
-              className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-800 transition"
+              href="/mairie"
+              className="rounded-2xl bg-violet-600 text-white px-5 py-3 text-sm font-semibold hover:bg-violet-700 transition"
             >
-              Retour demandes
+              Retour mairie
             </Link>
-            <Link
-              href="/partners"
-              className="rounded-2xl bg-white border border-slate-200 text-slate-700 px-5 py-3 text-sm font-semibold hover:bg-slate-50 transition"
-            >
-              Partenaires
-            </Link>
-          </>
+          )
         }
       />
 
@@ -176,6 +185,6 @@ export default function ClientsPage() {
           <EmptyState message="Aucun client trouvé." />
         )}
       </div>
-    </AppShell>
+    </AuthenticatedShell>
   );
 }

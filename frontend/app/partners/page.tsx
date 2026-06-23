@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import AppShell from "@/components/AppShell";
+import AuthenticatedShell from "@/components/AuthenticatedShell";
 import CategoryBadge from "@/components/CategoryBadge";
 import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
@@ -52,7 +52,7 @@ export default function PartnersPage() {
   const mobileCount = partners.filter((p) => p.phone_type === "mobile").length;
 
   return (
-    <AppShell
+    <AuthenticatedShell
       activeNav="partners"
       sidebarNote={{
         title: "Validation manuelle",
@@ -259,6 +259,6 @@ export default function PartnersPage() {
           <EmptyState message="Aucun partenaire ne correspond aux filtres sélectionnés." />
         )}
       </div>
-    </AppShell>
+    </AuthenticatedShell>
   );
 }

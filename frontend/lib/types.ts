@@ -44,4 +44,6 @@ export type ClientItem = {
   last_request_at?: string | null;
 };
 
+export type UserRole = "admin" | "mairie";
+
 export type AdminNav = "dashboard" | "mairie" | "partners" | "clients";

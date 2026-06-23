@@ -47,6 +47,50 @@ class PartnerCreate(BaseModel):
     address: str = Field(..., min_length=5)
 
 
+class ClientUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    address: Optional[str] = None
+
+
+class PartnerUpdate(BaseModel):
+    name: Optional[str] = None
+    siret: Optional[str] = None
+    phone: Optional[str] = None
+    category: Optional[str] = None
+    subtype: Optional[str] = None
+    address: Optional[str] = None
+
+
+ALLOWED_CATEGORIES = ["commerce", "service_local", "transport", "mairie"]
+
+ALLOWED_SUBTYPES = {
+    "commerce": ["fleuriste", "boucher"],
+    "service_local": [
+        "plombier",
+        "electricien",
+        "maçon",
+        "pisciniste",
+        "petits_travaux",
+    ],
+    "transport": ["taxi"],
+    "mairie": ["mairie"],
+}
+
+
+def validate_category_subtype(category: str, subtype: str):
+    category = category.strip().lower()
+    subtype = subtype.strip().lower()
+
+    if category not in ALLOWED_CATEGORIES:
+        return False, "invalid_category"
+
+    if subtype not in ALLOWED_SUBTYPES.get(category, []):
+        return False, "invalid_subtype"
+
+    return True, None
+
+
 # =========================
 # HELPERS
 # =========================
@@ -615,20 +659,9 @@ def get_partners(_admin=Depends(require_admin)):
 
 @app.post("/partners/apply")
 def create_partner_application(partner: PartnerCreate):
-    allowed_categories = ["commerce", "service_local", "transport", "mairie"]
+    allowed_categories = ALLOWED_CATEGORIES
 
-    allowed_subtypes = {
-        "commerce": ["fleuriste", "boucher"],
-        "service_local": [
-            "plombier",
-            "electricien",
-            "maçon",
-            "pisciniste",
-            "petits_travaux",
-        ],
-        "transport": ["taxi"],
-        "mairie": ["mairie"],
-    }
+    allowed_subtypes = ALLOWED_SUBTYPES
 
     category = partner.category.strip().lower()
     subtype = partner.subtype.strip().lower()
@@ -858,3 +891,127 @@ def get_client_detail(client_id: int, _admin=Depends(require_admin)):
         "client": client_row,
         "requests": requests_rows
     }
+
+
+@app.patch("/clients/{client_id}")
+def update_client(client_id: int, payload: ClientUpdate, _admin=Depends(require_admin)):
+    fields = []
+    values = []
+
+    if payload.first_name is not None:
+        fields.append("first_name = %s")
+        values.append(payload.first_name.strip() or None)
+
+    if payload.last_name is not None:
+        fields.append("last_name = %s")
+        values.append(payload.last_name.strip() or None)
+
+    if payload.address is not None:
+        fields.append("address = %s")
+        values.append(payload.address.strip() or None)
+
+    if not fields:
+        return {"error": "no_fields"}
+
+    fields.append("updated_at = NOW()")
+    values.append(client_id)
+
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"""
+                UPDATE clients
+                SET {", ".join(fields)}
+                WHERE id = %s
+                RETURNING id, phone, first_name, last_name, address, created_at, updated_at
+                """,
+                values,
+            )
+            row = cur.fetchone()
+
+            if not row:
+                return {"error": "not_found"}
+
+    return {"ok": True, "client": row}
+
+
+@app.patch("/partners/{partner_id}")
+def update_partner(partner_id: int, payload: PartnerUpdate, _admin=Depends(require_admin)):
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, name, siret, phone, phone_type, category, subtype, address, is_active
+                FROM partners
+                WHERE id = %s
+                """,
+                (partner_id,),
+            )
+            existing = cur.fetchone()
+
+            if not existing:
+                return {"error": "not_found"}
+
+            category = (
+                payload.category.strip().lower()
+                if payload.category is not None
+                else existing["category"]
+            )
+            subtype = (
+                payload.subtype.strip().lower()
+                if payload.subtype is not None
+                else existing["subtype"]
+            )
+
+            if payload.category is not None or payload.subtype is not None:
+                valid, error = validate_category_subtype(category, subtype)
+                if not valid:
+                    return {"ok": False, "error": error}
+
+            fields = []
+            values = []
+
+            if payload.name is not None:
+                fields.append("name = %s")
+                values.append(payload.name.strip())
+
+            if payload.siret is not None:
+                fields.append("siret = %s")
+                values.append(payload.siret.strip())
+
+            if payload.phone is not None:
+                normalized_phone = normalize_french_phone(payload.phone)
+                fields.append("phone = %s")
+                values.append(normalized_phone)
+                fields.append("phone_type = %s")
+                values.append(get_phone_type(payload.phone))
+
+            if payload.category is not None:
+                fields.append("category = %s")
+                values.append(category)
+
+            if payload.subtype is not None:
+                fields.append("subtype = %s")
+                values.append(subtype)
+
+            if payload.address is not None:
+                fields.append("address = %s")
+                values.append(payload.address.strip())
+
+            if not fields:
+                return {"error": "no_fields"}
+
+            values.append(partner_id)
+
+            cur.execute(
+                f"""
+                UPDATE partners
+                SET {", ".join(fields)}
+                WHERE id = %s
+                RETURNING id, name, siret, phone, phone_type, category, subtype, address, is_active, access_token, created_at
+                """,
+                values,
+            )
+            row = cur.fetchone()
+
+    return {"ok": True, "partner": row}

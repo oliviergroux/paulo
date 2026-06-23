@@ -3,26 +3,28 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import AppShell from "@/components/AppShell";
+import AuthenticatedShell from "@/components/AuthenticatedShell";
 import CategoryBadge from "@/components/CategoryBadge";
+import ClientEditForm from "@/components/ClientEditForm";
 import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
-import { adminFetch } from "@/lib/api";
-import { displayClientName, formatDate } from "@/lib/format";
+import { useRoleFetch } from "@/components/AuthenticatedShell";
+import { displayClientName, formatDate, isMairieRequest } from "@/lib/format";
 import type { ClientItem, RequestItem } from "@/lib/types";
 
 export default function ClientDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const { role, loading: roleLoading, fetchApi } = useRoleFetch();
 
   const [client, setClient] = useState<ClientItem | null>(null);
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
 
   const fetchClient = async () => {
-    const res = await adminFetch(`/clients/${id}`);
+    const res = await fetchApi(`/clients/${id}`);
     const data = await res.json();
 
     if (data.client) {
@@ -31,45 +33,64 @@ export default function ClientDetailPage() {
     }
   };
 
-  useEffect(() => {
-    fetchClient();
-  }, [id]);
+  const saveClient = async (payload: {
+    first_name: string | null;
+    last_name: string | null;
+    address: string | null;
+  }) => {
+    const res = await fetchApi(`/clients/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-  if (!client) {
+    if (!res.ok) throw new Error("save_failed");
+
+    const data = await res.json();
+    if (data.client) setClient(data.client);
+  };
+
+  useEffect(() => {
+    if (!roleLoading && role) fetchClient();
+  }, [id, role, roleLoading]);
+
+  if (roleLoading || !client) {
     return (
-      <AppShell activeNav="clients">
+      <AuthenticatedShell activeNav="clients">
         <p>Chargement...</p>
-      </AppShell>
+      </AuthenticatedShell>
     );
   }
 
-  const filteredRequests = requests.filter((req) =>
+  const visibleRequests =
+    role === "mairie"
+      ? requests.filter(isMairieRequest)
+      : requests;
+
+  const filteredRequests = visibleRequests.filter((req) =>
     statusFilter === "all" ? true : req.status === statusFilter
   );
 
-  const newCount = requests.filter((r) => r.status === "new").length;
-  const inProgressCount = requests.filter((r) => r.status === "in_progress").length;
-  const doneCount = requests.filter((r) => r.status === "done").length;
+  const newCount = visibleRequests.filter((r) => r.status === "new").length;
+  const inProgressCount = visibleRequests.filter(
+    (r) => r.status === "in_progress"
+  ).length;
+  const doneCount = visibleRequests.filter((r) => r.status === "done").length;
 
   return (
-    <AppShell activeNav="clients">
+    <AuthenticatedShell activeNav="clients">
       <PageHeader
         eyebrow="Fiche client"
         title={displayClientName(client.first_name, client.last_name)}
-        description="Historique complet des demandes de ce client."
+        description="Historique et informations de l'habitant."
         actions={
           <>
+            <ClientEditForm client={client} onSave={saveClient} />
             <Link
               href="/clients"
               className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-800 transition"
             >
-              Retour clients
-            </Link>
-            <Link
-              href="/"
-              className="rounded-2xl bg-white border border-slate-200 text-slate-700 px-5 py-3 text-sm font-semibold hover:bg-slate-50 transition"
-            >
-              Retour demandes
+              Retour
             </Link>
           </>
         }
@@ -107,7 +128,7 @@ export default function ClientDetailPage() {
             <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
               Total demandes
             </p>
-            <p className="font-semibold mt-2">{requests.length}</p>
+            <p className="font-semibold mt-2">{visibleRequests.length}</p>
           </div>
         </div>
       </div>
@@ -115,7 +136,7 @@ export default function ClientDetailPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <KpiCard
           label="Toutes"
-          value={requests.length}
+          value={visibleRequests.length}
           active={statusFilter === "all"}
           variant="blue"
           onClick={() => setStatusFilter("all")}
@@ -178,6 +199,6 @@ export default function ClientDetailPage() {
           <EmptyState message="Aucune demande pour ce filtre." />
         )}
       </div>
-    </AppShell>
+    </AuthenticatedShell>
   );
 }

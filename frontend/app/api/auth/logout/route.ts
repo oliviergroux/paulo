@@ -8,3 +8,9 @@ export async function POST() {
   cookieStore.delete(SESSION_COOKIE);
   return NextResponse.json({ ok: true });
 }
+
+export async function GET() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get(SESSION_COOKIE)?.value;
+  return NextResponse.json({ authenticated: Boolean(session) });
+}

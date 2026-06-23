@@ -6,7 +6,7 @@ import Link from "next/link";
 import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
-import RequestActionsPartner from "@/components/RequestActionsPartner";
+import RequestWorkflow from "@/components/RequestWorkflow";
 import RequestCard from "@/components/RequestCard";
 import { partnerFetch } from "@/lib/api";
 import type { PartnerSummary, RequestItem } from "@/lib/types";
@@ -169,10 +169,17 @@ export default function PartnerDashboardClient() {
               request={req}
               actionsWidth="narrow"
               actions={
-                <RequestActionsPartner
+                <RequestWorkflow
                   request={req}
+                  variant="admin"
+                  assignOptions={[]}
+                  onSelectAssign={() => {}}
+                  onAssign={() => {}}
                   onTake={() => markAsInProgress(req.id)}
                   onMarkDone={() => markAsDone(req.id)}
+                  onArchive={() => {}}
+                  showAssign={false}
+                  showArchive={false}
                 />
               }
             />

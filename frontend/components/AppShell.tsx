@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import type { AdminNav } from "@/lib/types";
+import type { AdminNav, UserRole } from "@/lib/types";
 
 type AppShellProps = {
+  role: UserRole;
   activeNav: AdminNav;
   sidebarNote?: {
     title: string;
@@ -13,11 +14,16 @@ type AppShellProps = {
   maxWidth?: "6xl" | "7xl";
 };
 
-const NAV_ITEMS: { id: AdminNav; href: string; label: string }[] = [
+const ADMIN_NAV: { id: AdminNav; href: string; label: string }[] = [
   { id: "dashboard", href: "/", label: "Dashboard" },
   { id: "mairie", href: "/mairie", label: "Mairie" },
   { id: "partners", href: "/partners", label: "Partenaires" },
   { id: "clients", href: "/clients", label: "Clients" },
+];
+
+const MAIRIE_NAV: { id: AdminNav; href: string; label: string }[] = [
+  { id: "mairie", href: "/mairie", label: "Demandes mairie" },
+  { id: "clients", href: "/clients", label: "Habitants" },
 ];
 
 async function handleLogout() {
@@ -26,25 +32,43 @@ async function handleLogout() {
 }
 
 export default function AppShell({
+  role,
   activeNav,
   sidebarNote,
   children,
   maxWidth = "7xl",
 }: AppShellProps) {
+  const isMairie = role === "mairie";
+  const navItems = isMairie ? MAIRIE_NAV : ADMIN_NAV;
   const maxWidthClass = maxWidth === "6xl" ? "max-w-6xl" : "max-w-7xl";
+  const logoClass = isMairie ? "bg-violet-600" : "bg-blue-500";
+  const roleLabel = isMairie ? "Espace mairie" : "Administration";
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-950">
+    <main
+      className={`min-h-screen text-slate-950 ${
+        isMairie ? "bg-violet-950" : "bg-slate-950"
+      }`}
+    >
       <div className="flex min-h-screen flex-col lg:flex-row">
-        <div className="lg:hidden bg-slate-950 text-white px-4 py-3 flex items-center justify-between gap-3">
+        <div
+          className={`lg:hidden text-white px-4 py-3 flex items-center justify-between gap-3 ${
+            isMairie ? "bg-violet-950" : "bg-slate-950"
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-blue-500 flex items-center justify-center font-bold text-sm">
+            <div
+              className={`h-8 w-8 rounded-xl flex items-center justify-center font-bold text-sm ${logoClass}`}
+            >
               P
             </div>
-            <span className="font-semibold">Paulo</span>
+            <div>
+              <span className="font-semibold block leading-tight">Paulo</span>
+              <span className="text-[10px] text-slate-400">{roleLabel}</span>
+            </div>
           </div>
           <nav className="flex gap-1 text-xs overflow-x-auto">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.id}
                 href={item.href}
@@ -60,21 +84,34 @@ export default function AppShell({
           </nav>
         </div>
 
-        <aside className="hidden lg:flex w-72 flex-col border-r border-white/10 bg-slate-950 text-white">
+        <aside
+          className={`hidden lg:flex w-72 flex-col border-r border-white/10 text-white ${
+            isMairie ? "bg-violet-950" : "bg-slate-950"
+          }`}
+        >
           <div className="p-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-blue-500 flex items-center justify-center font-bold">
+              <div
+                className={`h-10 w-10 rounded-2xl flex items-center justify-center font-bold ${logoClass}`}
+              >
                 P
               </div>
               <div>
                 <p className="font-semibold text-lg">Paulo</p>
-                <p className="text-xs text-slate-400">Local request hub</p>
+                <p className="text-xs text-slate-400">{roleLabel}</p>
               </div>
             </div>
+            {isMairie && (
+              <div className="mt-4 rounded-2xl bg-violet-900/50 border border-violet-800 px-3 py-2">
+                <p className="text-xs text-violet-200">
+                  Vue collectivité — accès limité
+                </p>
+              </div>
+            )}
           </div>
 
           <nav className="px-4 space-y-2">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.id}
                 href={item.href}
@@ -88,12 +125,14 @@ export default function AppShell({
               </Link>
             ))}
 
-            <Link
-              href="/devenir-partenaire"
-              className="block rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 hover:bg-white/10"
-            >
-              Formulaire public
-            </Link>
+            {!isMairie && (
+              <Link
+                href="/devenir-partenaire"
+                className="block rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 hover:bg-white/10"
+              >
+                Formulaire public
+              </Link>
+            )}
           </nav>
 
           <div className="mt-auto p-4 space-y-2">

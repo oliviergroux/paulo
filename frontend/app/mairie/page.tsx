@@ -2,14 +2,14 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import AppShell from "@/components/AppShell";
+import AuthenticatedShell from "@/components/AuthenticatedShell";
 import DayDivider from "@/components/DayDivider";
 import EmptyState from "@/components/EmptyState";
 import KpiCard from "@/components/KpiCard";
 import PageHeader from "@/components/PageHeader";
-import RequestActionsMairie from "@/components/RequestActionsMairie";
 import RequestCard from "@/components/RequestCard";
-import { adminFetch } from "@/lib/api";
+import RequestWorkflow from "@/components/RequestWorkflow";
+import { mairieFetch } from "@/lib/api";
 import {
   averageHandlingHours,
   formatDayLabel,
@@ -99,7 +99,7 @@ export default function MairiePage() {
   );
 
   const fetchRequests = async () => {
-    const res = await adminFetch("/requests");
+    const res = await mairieFetch("/requests");
     const data: RequestItem[] = await res.json();
     const mairieData = data.filter(isMairieRequest);
     const currentIds = new Set(mairieData.map((req) => req.id));
@@ -129,12 +129,12 @@ export default function MairiePage() {
   };
 
   const fetchServices = async () => {
-    const res = await adminFetch("/partners");
+    const res = await mairieFetch("/partners");
     setServices(await res.json());
   };
 
   const markAsDone = async (id: number) => {
-    await adminFetch(`/requests/${id}/status`, {
+    await mairieFetch(`/requests/${id}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify("done"),
@@ -143,7 +143,7 @@ export default function MairiePage() {
   };
 
   const markAsInProgress = async (id: number) => {
-    await adminFetch(`/requests/${id}/status`, {
+    await mairieFetch(`/requests/${id}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify("in_progress"),
@@ -155,7 +155,7 @@ export default function MairiePage() {
     const serviceId = selectedServices[requestId];
     if (!serviceId) return;
 
-    await adminFetch(`/requests/${requestId}/assign`, {
+    await mairieFetch(`/requests/${requestId}/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ partner_id: Number(serviceId) }),
@@ -164,7 +164,7 @@ export default function MairiePage() {
   };
 
   const archiveRequest = async (requestId: number) => {
-    await adminFetch(`/requests/${requestId}/archive`, { method: "POST" });
+    await mairieFetch(`/requests/${requestId}/archive`, { method: "POST" });
     fetchRequests();
   };
 
@@ -176,7 +176,7 @@ export default function MairiePage() {
   }, []);
 
   return (
-    <AppShell
+    <AuthenticatedShell
       activeNav="mairie"
       sidebarNote={{
         title: "Espace collectivité",
@@ -319,11 +319,12 @@ export default function MairiePage() {
                     request={req}
                     highlighted={highlightedIds.includes(req.id)}
                     actions={
-                      <RequestActionsMairie
+                      <RequestWorkflow
                         request={req}
-                        services={mairieServices}
-                        selectedServiceId={selectedServices[req.id]}
-                        onSelectService={(serviceId) =>
+                        variant="mairie"
+                        assignOptions={mairieServices}
+                        selectedAssignId={selectedServices[req.id]}
+                        onSelectAssign={(serviceId) =>
                           setSelectedServices((prev) => ({
                             ...prev,
                             [req.id]: serviceId,
@@ -333,6 +334,8 @@ export default function MairiePage() {
                         onTake={() => markAsInProgress(req.id)}
                         onMarkDone={() => markAsDone(req.id)}
                         onArchive={() => archiveRequest(req.id)}
+                        assignLabel="Assigner à un service municipal"
+                        assignedLabel="Service :"
                       />
                     }
                   />
@@ -341,6 +344,6 @@ export default function MairiePage() {
             </React.Fragment>
           ))}
       </div>
-    </AppShell>
+    </AuthenticatedShell>
   );
 }
