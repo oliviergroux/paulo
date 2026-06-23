@@ -18,11 +18,6 @@ const PROFILE_COPY = {
     title: "Service local",
     promise: "Recevez des demandes de clients proches de chez vous.",
   },
-  mairie: {
-    icon: "🏛️",
-    title: "Mairie",
-    promise: "Centralisez les demandes des habitants en temps réel.",
-  },
   transport: {
     icon: "🚕",
     title: "Transport",

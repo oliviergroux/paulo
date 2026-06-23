@@ -1,0 +1,2 @@
+ALTER TABLE requests
+ADD COLUMN IF NOT EXISTS assigned_service VARCHAR(64);

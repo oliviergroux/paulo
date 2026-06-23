@@ -1,4 +1,6 @@
-export const SUBTYPES: Record<string, string[]> = {
+export const PARTNER_CATEGORIES = ["commerce", "service_local", "transport"] as const;
+
+export const PARTNER_SUBTYPES: Record<string, string[]> = {
   commerce: [
     "fleuriste",
     "boucher",
@@ -28,22 +30,26 @@ export const SUBTYPES: Record<string, string[]> = {
     "autre",
   ],
   transport: ["taxi"],
-  mairie: [
-    "voirie",
-    "eclairage",
-    "proprete",
-    "espaces_verts",
-    "eau_assainissement",
-    "administratif",
-    "urbanisme",
-    "ecole_enfance",
-    "sport_culture",
-    "nuisances",
-    "renseignement",
-    "mairie",
-    "autre",
-  ],
 };
+
+/** Sujets de demandes mairie — classification IA et assignation interne. */
+export const MAIRIE_SERVICES = [
+  "voirie",
+  "eclairage",
+  "proprete",
+  "espaces_verts",
+  "eau_assainissement",
+  "administratif",
+  "urbanisme",
+  "ecole_enfance",
+  "sport_culture",
+  "nuisances",
+  "renseignement",
+  "autre",
+] as const;
+
+/** Alias pour les formulaires partenaire. */
+export const SUBTYPES = PARTNER_SUBTYPES;
 
 export const SUBTYPE_LABELS: Record<string, string> = {
   fleuriste: "Fleuriste",
@@ -80,12 +86,18 @@ export const SUBTYPE_LABELS: Record<string, string> = {
   sport_culture: "Sport / culture",
   nuisances: "Nuisances / incivilités",
   renseignement: "Renseignement",
-  mairie: "Mairie (général)",
   autre: "Autre",
 };
 
 export function subtypeLabel(subtype: string): string {
   return SUBTYPE_LABELS[subtype] || subtype.replace(/_/g, " ");
+}
+
+export function mairieServiceOptions() {
+  return MAIRIE_SERVICES.map((service) => ({
+    id: service,
+    label: subtypeLabel(service),
+  }));
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -94,4 +106,10 @@ export const CATEGORY_LABELS: Record<string, string> = {
   transport: "Transport",
   mairie: "Collectivité",
   autre: "Autre",
+};
+
+export const PARTNER_CATEGORY_LABELS: Record<string, string> = {
+  commerce: "Commerce",
+  service_local: "Service local",
+  transport: "Transport",
 };

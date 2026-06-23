@@ -105,7 +105,6 @@ export default function PartnerEditForm({
           <option value="commerce">Commerce</option>
           <option value="service_local">Service local</option>
           <option value="transport">Transport</option>
-          <option value="mairie">Mairie</option>
         </select>
         <select
           value={form.subtype}

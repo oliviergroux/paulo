@@ -18,13 +18,14 @@ from auth import (
     require_admin,
     verify_partner_token,
 )
-from db import get_db_connection
+from db import ensure_schema, get_db_connection
 from taxonomy import (
-    ALLOWED_CATEGORIES,
-    ALLOWED_SUBTYPES,
+    PARTNER_CATEGORIES,
     build_subtype_classification_prompt,
-    normalize_subtype,
-    validate_category_subtype,
+    normalize_partner_subtype,
+    normalize_request_subtype,
+    validate_mairie_service,
+    validate_partner_category_subtype,
 )
 
 
@@ -159,7 +160,7 @@ def classify_subtype(category: str, message_text: str):
         input=prompt,
     )
     raw = result.output_text.strip().lower()
-    return normalize_subtype(category, raw)
+    return normalize_request_subtype(category, raw)
 
 
 def extract_client_info(message_text: str):
@@ -266,6 +267,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def startup():
+    ensure_schema()
 
 
 # =========================
@@ -389,6 +395,7 @@ def get_requests(_admin=Depends(require_admin)):
                     r.subtype,
                     r.status,
                     r.assigned_partner_id,
+                    r.assigned_service,
                     p.name AS partner_name,
                     r.created_at,
                     r.handled_at,
@@ -476,6 +483,49 @@ def archive_request(request_id: int, _admin=Depends(require_admin)):
     return {"ok": True}
 
 
+@app.post("/requests/{request_id}/assign-service")
+def assign_request_service(
+    request_id: int, payload: dict = Body(...), _admin=Depends(require_admin)
+):
+    service = payload.get("service", "").strip().lower()
+    valid, error = validate_mairie_service(service)
+    if not valid:
+        return {"error": error}
+
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, category
+                FROM requests
+                WHERE id = %s
+                """,
+                (request_id,),
+            )
+            req = cur.fetchone()
+
+            if not req:
+                return {"error": "not_found"}
+
+            if req["category"].strip().lower() != "mairie":
+                return {"error": "not_mairie_request"}
+
+            cur.execute(
+                """
+                UPDATE requests
+                SET assigned_to = %s,
+                    assigned_service = %s,
+                    assigned_partner_id = NULL
+                WHERE id = %s
+                RETURNING id, assigned_service
+                """,
+                ("service", service, request_id),
+            )
+            row = cur.fetchone()
+
+    return {"ok": True, "assigned_service": row["assigned_service"]}
+
+
 @app.post("/requests/{request_id}/assign")
 def assign_request(
     request_id: int, payload: dict = Body(...), _admin=Depends(require_admin)
@@ -510,13 +560,17 @@ def assign_request(
             if not partner or not req:
                 return {"error": "not_found"}
 
+            if req["category"].strip().lower() == "mairie":
+                return {"error": "use_assign_service"}
+
             if not partner["is_active"]:
                 return {"error": "partner_inactive"}
 
             cur.execute("""
                 UPDATE requests
                 SET assigned_to = %s,
-                    assigned_partner_id = %s
+                    assigned_partner_id = %s,
+                    assigned_service = NULL
                 WHERE id = %s
             """, ("partner", partner_id, request_id))
 
@@ -603,6 +657,7 @@ def get_partners(_admin=Depends(require_admin)):
                 LEFT JOIN requests r
                     ON r.assigned_partner_id = p.id
                     AND r.archived = false
+                WHERE p.category <> 'mairie'
                 GROUP BY
                     p.id,
                     p.name,
@@ -622,18 +677,15 @@ def get_partners(_admin=Depends(require_admin)):
 
 @app.post("/partners/apply")
 def create_partner_application(partner: PartnerCreate):
-    allowed_categories = ALLOWED_CATEGORIES
-
-    allowed_subtypes = ALLOWED_SUBTYPES
-
     category = partner.category.strip().lower()
-    subtype = normalize_subtype(category, partner.subtype.strip().lower())
+    subtype = normalize_partner_subtype(category, partner.subtype.strip().lower())
 
-    if category not in allowed_categories:
+    if category not in PARTNER_CATEGORIES:
         return {"ok": False, "error": "invalid_category"}
 
-    if subtype not in allowed_subtypes.get(category, []):
-        return {"ok": False, "error": "invalid_subtype"}
+    valid, error = validate_partner_category_subtype(category, subtype)
+    if not valid:
+        return {"ok": False, "error": error}
 
     normalized_phone = normalize_french_phone(partner.phone)
     phone_type = get_phone_type(partner.phone)
@@ -842,6 +894,7 @@ def get_client_detail(client_id: int, _admin=Depends(require_admin)):
                     r.created_at,
                     r.handled_at,
                     r.assigned_partner_id,
+                    r.assigned_service,
                     p.name AS partner_name
                 FROM requests r
                 LEFT JOIN partners p ON r.assigned_partner_id = p.id
@@ -921,13 +974,13 @@ def update_partner(partner_id: int, payload: PartnerUpdate, _admin=Depends(requi
                 else existing["category"]
             )
             subtype = (
-                normalize_subtype(category, payload.subtype.strip().lower())
+                normalize_partner_subtype(category, payload.subtype.strip().lower())
                 if payload.subtype is not None
                 else existing["subtype"]
             )
 
             if payload.category is not None or payload.subtype is not None:
-                valid, error = validate_category_subtype(category, subtype)
+                valid, error = validate_partner_category_subtype(category, subtype)
                 if not valid:
                     return {"ok": False, "error": error}
 

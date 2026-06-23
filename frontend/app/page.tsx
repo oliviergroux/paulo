@@ -10,7 +10,10 @@ import RequestCard from "@/components/RequestCard";
 import RequestWorkflow, { matchingPartners } from "@/components/RequestWorkflow";
 import { adminFetch } from "@/lib/api";
 import { formatDayLabel, isUrgentRequest } from "@/lib/format";
+import { mairieServiceOptions } from "@/lib/taxonomy";
 import type { PartnerSummary, RequestItem } from "@/lib/types";
+
+const MAIRIE_SERVICE_OPTIONS = mairieServiceOptions();
 
 export default function Home() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
@@ -20,6 +23,7 @@ export default function Home() {
   const [highlightedIds, setHighlightedIds] = useState<number[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [selectedPartners, setSelectedPartners] = useState<Record<number, string>>({});
+  const [selectedServices, setSelectedServices] = useState<Record<number, string>>({});
   const [quickFilters, setQuickFilters] = useState({
     today: false,
     urgent: false,
@@ -143,6 +147,18 @@ export default function Home() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ partner_id: Number(partnerId) }),
+    });
+    fetchRequests();
+  };
+
+  const assignMairieService = async (requestId: number) => {
+    const service = selectedServices[requestId];
+    if (!service) return;
+
+    await adminFetch(`/requests/${requestId}/assign-service`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service }),
     });
     fetchRequests();
   };
@@ -284,7 +300,10 @@ export default function Home() {
             <React.Fragment key={dayLabel}>
               <DayDivider label={dayLabel} />
               <div className="space-y-4">
-                {dayRequests.map((req) => (
+                {dayRequests.map((req) => {
+                  const isMairie = req.category?.trim().toLowerCase() === "mairie";
+
+                  return (
                   <RequestCard
                     key={req.id}
                     request={req}
@@ -293,22 +312,47 @@ export default function Home() {
                       <RequestWorkflow
                         request={req}
                         variant="admin"
-                        assignOptions={matchingPartners(req, partners)}
-                        selectedAssignId={selectedPartners[req.id]}
-                        onSelectAssign={(partnerId) =>
-                          setSelectedPartners((prev) => ({
-                            ...prev,
-                            [req.id]: partnerId,
-                          }))
+                        assignMode={isMairie ? "service" : "partner"}
+                        assignOptions={
+                          isMairie
+                            ? MAIRIE_SERVICE_OPTIONS
+                            : matchingPartners(req, partners)
                         }
-                        onAssign={() => assignPartner(req.id)}
+                        selectedAssignId={
+                          isMairie
+                            ? selectedServices[req.id] || req.subtype || ""
+                            : selectedPartners[req.id]
+                        }
+                        onSelectAssign={(value) =>
+                          isMairie
+                            ? setSelectedServices((prev) => ({
+                                ...prev,
+                                [req.id]: value,
+                              }))
+                            : setSelectedPartners((prev) => ({
+                                ...prev,
+                                [req.id]: value,
+                              }))
+                        }
+                        onAssign={() =>
+                          isMairie
+                            ? assignMairieService(req.id)
+                            : assignPartner(req.id)
+                        }
                         onTake={() => markAsInProgress(req.id)}
                         onMarkDone={() => markAsDone(req.id)}
                         onArchive={() => archiveRequest(req.id)}
+                        assignLabel={
+                          isMairie
+                            ? "Assigner à un service municipal"
+                            : "Assigner à un partenaire"
+                        }
+                        assignedLabel={isMairie ? "Service :" : "Assigné à"}
                       />
                     }
                   />
-                ))}
+                  );
+                })}
               </div>
             </React.Fragment>
           ))}

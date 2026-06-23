@@ -16,12 +16,15 @@ import {
   formatHours,
   isMairieRequest,
 } from "@/lib/format";
-import type { PartnerSummary, RequestItem } from "@/lib/types";
+import { MAIRIE_SERVICES, mairieServiceOptions } from "@/lib/taxonomy";
+import type { RequestItem } from "@/lib/types";
+
+const SERVICE_OPTIONS = mairieServiceOptions();
 
 export default function MairiePage() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
-  const [services, setServices] = useState<PartnerSummary[]>([]);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [subtypeFilter, setSubtypeFilter] = useState("all");
   const [highlightedIds, setHighlightedIds] = useState<number[]>([]);
   const [selectedServices, setSelectedServices] = useState<Record<number, string>>({});
   const [quickFilters, setQuickFilters] = useState({
@@ -35,11 +38,6 @@ export default function MairiePage() {
   const isFirstLoadRef = useRef(true);
 
   const mairieRequests = requests.filter(isMairieRequest);
-  const mairieServices = services.filter(
-    (partner) =>
-      partner.is_active &&
-      partner.category?.trim().toLowerCase() === "mairie"
-  );
 
   const toggleQuickFilter = (key: keyof typeof quickFilters) => {
     setQuickFilters((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -47,6 +45,7 @@ export default function MairiePage() {
 
   const resetFilters = () => {
     setStatusFilter("all");
+    setSubtypeFilter("all");
     setQuickFilters({
       today: false,
       inProgress: false,
@@ -63,13 +62,19 @@ export default function MairiePage() {
   ).length;
   const doneCount = mairieRequests.filter((r) => r.status === "done").length;
   const unassignedCount = mairieRequests.filter(
-    (r) => !r.assigned_partner_id && r.status !== "done"
+    (r) => !r.assigned_service && r.status !== "done"
   ).length;
   const uniqueResidents = new Set(mairieRequests.map((r) => r.phone)).size;
   const avgHours = averageHandlingHours(mairieRequests);
+  const topicCount = new Set(
+    mairieRequests.map((r) => r.subtype?.trim().toLowerCase()).filter(Boolean)
+  ).size;
 
   const filteredRequests = mairieRequests
     .filter((req) => (statusFilter === "all" ? true : req.status === statusFilter))
+    .filter((req) =>
+      subtypeFilter === "all" ? true : req.subtype === subtypeFilter
+    )
     .filter((req) =>
       quickFilters.today ? formatDayLabel(req.created_at) === "Aujourd’hui" : true
     )
@@ -79,7 +84,7 @@ export default function MairiePage() {
     .filter((req) => (quickFilters.done ? req.status === "done" : true))
     .filter((req) =>
       quickFilters.unassigned
-        ? !req.assigned_partner_id && req.status !== "done"
+        ? !req.assigned_service && req.status !== "done"
         : true
     )
     .sort(
@@ -128,11 +133,6 @@ export default function MairiePage() {
     setRequests(data);
   };
 
-  const fetchServices = async () => {
-    const res = await mairieFetch("/partners");
-    setServices(await res.json());
-  };
-
   const markAsDone = async (id: number) => {
     await mairieFetch(`/requests/${id}/status`, {
       method: "POST",
@@ -152,13 +152,13 @@ export default function MairiePage() {
   };
 
   const assignService = async (requestId: number) => {
-    const serviceId = selectedServices[requestId];
-    if (!serviceId) return;
+    const service = selectedServices[requestId];
+    if (!service) return;
 
-    await mairieFetch(`/requests/${requestId}/assign`, {
+    await mairieFetch(`/requests/${requestId}/assign-service`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ partner_id: Number(serviceId) }),
+      body: JSON.stringify({ service }),
     });
     fetchRequests();
   };
@@ -170,7 +170,6 @@ export default function MairiePage() {
 
   useEffect(() => {
     fetchRequests();
-    fetchServices();
     const interval = setInterval(fetchRequests, 3000);
     return () => clearInterval(interval);
   }, []);
@@ -190,12 +189,6 @@ export default function MairiePage() {
         description="Signalements, informations et demandes administratives classées mairie."
         actions={
           <>
-            <Link
-              href="/"
-              className="rounded-2xl bg-white border border-slate-200 text-slate-700 px-5 py-3 text-sm font-medium shadow-sm hover:bg-slate-50 transition"
-            >
-              Toutes les demandes
-            </Link>
             <Link
               href="/clients"
               className="rounded-2xl bg-violet-600 text-white px-5 py-3 text-sm font-medium shadow-sm hover:bg-violet-700 transition"
@@ -250,7 +243,7 @@ export default function MairiePage() {
               {unassignedCount}
             </p>
             <p className="text-xs text-violet-600 mt-1">
-              Cliquer pour filtrer
+              Sans service municipal désigné
             </p>
           </button>
         </div>
@@ -266,12 +259,10 @@ export default function MairiePage() {
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Services municipaux actifs</p>
-          <p className="text-3xl font-bold mt-2 text-slate-950">
-            {mairieServices.length}
-          </p>
+          <p className="text-sm text-slate-500">Sujets détectés</p>
+          <p className="text-3xl font-bold mt-2 text-slate-950">{topicCount}</p>
           <p className="text-xs text-slate-400 mt-1">
-            Partenaires catégorie mairie validés
+            Types de demandes distincts (IA)
           </p>
         </div>
       </div>
@@ -286,6 +277,19 @@ export default function MairiePage() {
           <option value="new">Nouveau</option>
           <option value="in_progress">En cours</option>
           <option value="done">Traité</option>
+        </select>
+
+        <select
+          value={subtypeFilter}
+          onChange={(e) => setSubtypeFilter(e.target.value)}
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+        >
+          <option value="all">Tous sujets</option>
+          {MAIRIE_SERVICES.map((service) => (
+            <option key={service} value={service}>
+              {SERVICE_OPTIONS.find((option) => option.id === service)?.label}
+            </option>
+          ))}
         </select>
 
         <button
@@ -322,8 +326,11 @@ export default function MairiePage() {
                       <RequestWorkflow
                         request={req}
                         variant="mairie"
-                        assignOptions={mairieServices}
-                        selectedAssignId={selectedServices[req.id]}
+                        assignMode="service"
+                        assignOptions={SERVICE_OPTIONS}
+                        selectedAssignId={
+                          selectedServices[req.id] || req.subtype || ""
+                        }
                         onSelectAssign={(serviceId) =>
                           setSelectedServices((prev) => ({
                             ...prev,

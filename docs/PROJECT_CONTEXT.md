@@ -199,9 +199,12 @@ Sous-types :
 
 * taxi
 
-## mairie
+## mairie (demandes uniquement)
 
-Sous-types :
+Les sous-types mairie décrivent le **sujet d'une demande**, pas un partenaire.
+La collectivité est onboardée en interne (pas de formulaire public).
+
+Sujets de demande / services municipaux :
 
 * voirie
 * eclairage
@@ -214,8 +217,9 @@ Sous-types :
 * sport_culture
 * nuisances
 * renseignement
-* mairie (legacy, demande non précisée)
 * autre
+
+Assignation interne via `requests.assigned_service` (même enum).
 
 ---
 
@@ -247,15 +251,16 @@ Informations :
 * siret
 * phone
 * phone_type
-* category
-* subtype
+* category (commerce, service_local, transport — pas mairie)
+* subtype (métier du partenaire)
 * address
 * is_active
 * access_token
 
 Objectif :
 
-Réseau de partenaires locaux validés.
+Réseau de partenaires locaux validés (commerces, artisans, transport).
+Les collectivités ne sont pas des partenaires.
 
 ---
 
@@ -267,10 +272,11 @@ Informations :
 * phone
 * transcription
 * category
-* subtype
+* subtype (sujet IA — y compris sous-types mairie)
 * status
 * client_id
-* assigned_partner_id
+* assigned_partner_id (commerces / artisans / taxi)
+* assigned_service (services municipaux, demandes mairie)
 * archived
 * created_at
 * handled_at

@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import type { PartnerSummary, RequestItem } from "@/lib/types";
+import { subtypeLabel } from "@/lib/taxonomy";
+import type { AssignOption, PartnerSummary, RequestItem } from "@/lib/types";
 
 type WorkflowVariant = "admin" | "mairie";
 
 type RequestWorkflowProps = {
   request: RequestItem;
   variant: WorkflowVariant;
-  assignOptions: PartnerSummary[];
+  assignMode?: "partner" | "service";
+  assignOptions: AssignOption[];
   selectedAssignId?: string;
   onSelectAssign: (id: string) => void;
   onAssign: () => Promise<void> | void;
@@ -56,9 +58,14 @@ function stepIndex(status: string): number {
   return 0;
 }
 
+function isMairieRequest(request: RequestItem): boolean {
+  return request.category?.trim().toLowerCase() === "mairie";
+}
+
 export default function RequestWorkflow({
   request,
   variant,
+  assignMode = "partner",
   assignOptions,
   selectedAssignId,
   onSelectAssign,
@@ -74,6 +81,10 @@ export default function RequestWorkflow({
   const [busy, setBusy] = useState<string | null>(null);
   const styles = VARIANT_STYLES[variant];
   const currentStep = stepIndex(request.status);
+  const serviceMode = assignMode === "service" || isMairieRequest(request);
+  const isAssigned = serviceMode
+    ? Boolean(request.assigned_service)
+    : Boolean(request.assigned_partner_id);
 
   const run = async (key: string, action: () => Promise<void> | void) => {
     setBusy(key);
@@ -130,7 +141,16 @@ export default function RequestWorkflow({
         </div>
       </div>
 
-      {request.assigned_partner_id && request.partner_name && (
+      {serviceMode && request.assigned_service && (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm font-medium ${styles.chip}`}
+        >
+          <span className="text-slate-500 font-normal">{assignedLabel} </span>
+          {subtypeLabel(request.assigned_service)}
+        </div>
+      )}
+
+      {!serviceMode && request.assigned_partner_id && request.partner_name && (
         <div
           className={`rounded-2xl border px-4 py-3 text-sm font-medium ${styles.chip}`}
         >
@@ -174,9 +194,7 @@ export default function RequestWorkflow({
         )}
       </div>
 
-      {!showAssign || request.assigned_partner_id || request.status === "done"
-        ? null
-        : (
+      {!showAssign || isAssigned || request.status === "done" ? null : (
         <div className="pt-4 border-t border-slate-200 space-y-3">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
             {assignLabel}
@@ -190,14 +208,14 @@ export default function RequestWorkflow({
             <option value="">Sélectionner...</option>
             {assignOptions.map((option) => (
               <option key={option.id} value={option.id}>
-                {option.name}
+                {option.label}
               </option>
             ))}
           </select>
 
           {assignOptions.length === 0 && (
             <p className="text-xs text-slate-500 leading-5">
-              Aucun profil compatible disponible pour le moment.
+              Aucune option disponible pour le moment.
             </p>
           )}
 
@@ -214,7 +232,7 @@ export default function RequestWorkflow({
             {busy === "assign" ? "Assignation..." : "Confirmer l'assignation"}
           </button>
         </div>
-        )}
+      )}
     </div>
   );
 }
@@ -222,20 +240,36 @@ export default function RequestWorkflow({
 export function matchingPartners(
   request: RequestItem,
   partners: PartnerSummary[]
-): PartnerSummary[] {
+): AssignOption[] {
   const requestCategory = request.category?.trim().toLowerCase();
   const requestSubtype = request.subtype?.trim().toLowerCase();
 
-  return partners.filter((partner) => {
-    const partnerCategory = partner.category?.trim().toLowerCase();
-    const partnerSubtype = partner.subtype?.trim().toLowerCase();
+  if (requestCategory === "mairie") {
+    return [];
+  }
 
-    return (
-      partner.is_active &&
-      partnerCategory === requestCategory &&
-      (!requestSubtype ||
-        requestSubtype === "autre" ||
-        partnerSubtype === requestSubtype)
-    );
-  });
+  return partners
+    .filter((partner) => {
+      const partnerCategory = partner.category?.trim().toLowerCase();
+      const partnerSubtype = partner.subtype?.trim().toLowerCase();
+
+      return (
+        partner.is_active &&
+        partnerCategory === requestCategory &&
+        (!requestSubtype ||
+          requestSubtype === "autre" ||
+          partnerSubtype === requestSubtype)
+      );
+    })
+    .map((partner) => ({
+      id: String(partner.id),
+      label: partner.name,
+    }));
+}
+
+export function partnerAssignOptions(partners: PartnerSummary[]): AssignOption[] {
+  return partners.map((partner) => ({
+    id: String(partner.id),
+    label: partner.name,
+  }));
 }

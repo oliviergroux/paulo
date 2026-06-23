@@ -8,10 +8,16 @@ export type RequestItem = {
   created_at: string;
   handled_at?: string | null;
   assigned_partner_id?: number | null;
+  assigned_service?: string | null;
   partner_name?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   address?: string | null;
+};
+
+export type AssignOption = {
+  id: string;
+  label: string;
 };
 
 export type PartnerSummary = {

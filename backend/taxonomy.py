@@ -1,6 +1,8 @@
-ALLOWED_CATEGORIES = ["commerce", "service_local", "transport", "mairie"]
+PARTNER_CATEGORIES = ["commerce", "service_local", "transport"]
 
-ALLOWED_SUBTYPES = {
+REQUEST_CATEGORIES = ["commerce", "service_local", "transport", "mairie", "autre"]
+
+PARTNER_SUBTYPES = {
     "commerce": [
         "fleuriste",
         "boucher",
@@ -30,21 +32,26 @@ ALLOWED_SUBTYPES = {
         "autre",
     ],
     "transport": ["taxi"],
-    "mairie": [
-        "voirie",
-        "eclairage",
-        "proprete",
-        "espaces_verts",
-        "eau_assainissement",
-        "administratif",
-        "urbanisme",
-        "ecole_enfance",
-        "sport_culture",
-        "nuisances",
-        "renseignement",
-        "mairie",
-        "autre",
-    ],
+}
+
+MAIRIE_SERVICES = [
+    "voirie",
+    "eclairage",
+    "proprete",
+    "espaces_verts",
+    "eau_assainissement",
+    "administratif",
+    "urbanisme",
+    "ecole_enfance",
+    "sport_culture",
+    "nuisances",
+    "renseignement",
+    "autre",
+]
+
+REQUEST_SUBTYPES = {
+    **PARTNER_SUBTYPES,
+    "mairie": MAIRIE_SERVICES,
 }
 
 COMMERCE_SUBTYPE_HINTS = """
@@ -55,7 +62,7 @@ COMMERCE_SUBTYPE_HINTS = """
 - superette : supérette, petit supermarché local
 - pharmacie : médicaments sans ordonnance, conseil pharma, parapharmacie
 - fromager : fromagerie, crèmerie
-- poissonnier : poissonnerie, fruits de mer
+- poissonnier : poissonnierie, fruits de mer
 - restaurant : restaurant, traiteur, repas sur place ou à emporter
 - cafe_bar : café, bar, brasserie, débit de boisson
 - coiffeur : coiffure, barbier, salon de coiffure
@@ -80,25 +87,39 @@ MAIRIE_SUBTYPE_HINTS = """
 - sport_culture : médiathèque, salle des fêtes, équipements sportifs, animations
 - nuisances : bruit, odeurs, stationnement gênant, incivilités
 - renseignement : horaires mairie, contact service, renseignement général
-- mairie : demande mairie sans précision suffisante
 - autre : demande publique non listée
 """
 
+# Backward-compatible aliases used elsewhere in the codebase.
+ALLOWED_CATEGORIES = PARTNER_CATEGORIES
+ALLOWED_SUBTYPES = PARTNER_SUBTYPES
 
-def validate_category_subtype(category: str, subtype: str):
+
+def validate_partner_category_subtype(category: str, subtype: str):
     category = category.strip().lower()
     subtype = subtype.strip().lower()
 
-    if category not in ALLOWED_CATEGORIES:
+    if category not in PARTNER_CATEGORIES:
         return False, "invalid_category"
 
-    if subtype not in ALLOWED_SUBTYPES.get(category, []):
+    if subtype not in PARTNER_SUBTYPES.get(category, []):
         return False, "invalid_subtype"
 
     return True, None
 
 
-def normalize_subtype(category: str, raw_subtype: str) -> str:
+def validate_category_subtype(category: str, subtype: str):
+    return validate_partner_category_subtype(category, subtype)
+
+
+def validate_mairie_service(service: str):
+    service = service.strip().lower()
+    if service not in MAIRIE_SERVICES:
+        return False, "invalid_service"
+    return True, None
+
+
+def normalize_partner_subtype(category: str, raw_subtype: str) -> str:
     category = category.strip().lower()
     subtype = raw_subtype.strip().lower().replace(" ", "_").replace("-", "_")
 
@@ -115,16 +136,11 @@ def normalize_subtype(category: str, raw_subtype: str) -> str:
         "librairie": "librairie_papeterie",
         "papeterie": "librairie_papeterie",
         "coiffure": "coiffeur",
-        "voirie_route": "voirie",
-        "lampadaire": "eclairage",
-        "dechets": "proprete",
-        "decheterie": "proprete",
-        "etat_civil": "administratif",
     }
 
     subtype = aliases.get(subtype, subtype)
 
-    allowed = ALLOWED_SUBTYPES.get(category, [])
+    allowed = PARTNER_SUBTYPES.get(category, [])
     if subtype in allowed:
         return subtype
 
@@ -134,11 +150,43 @@ def normalize_subtype(category: str, raw_subtype: str) -> str:
     return subtype
 
 
+def normalize_request_subtype(category: str, raw_subtype: str) -> str:
+    category = category.strip().lower()
+    subtype = raw_subtype.strip().lower().replace(" ", "_").replace("-", "_")
+
+    if category == "mairie":
+        aliases = {
+            "voirie_route": "voirie",
+            "lampadaire": "eclairage",
+            "dechets": "proprete",
+            "decheterie": "proprete",
+            "etat_civil": "administratif",
+            "mairie": "autre",
+        }
+        subtype = aliases.get(subtype, subtype)
+        allowed = MAIRIE_SERVICES
+    else:
+        subtype = normalize_partner_subtype(category, subtype)
+        allowed = REQUEST_SUBTYPES.get(category, [])
+
+    if subtype in allowed:
+        return subtype
+
+    if "autre" in allowed:
+        return "autre"
+
+    return subtype
+
+
+def normalize_subtype(category: str, raw_subtype: str) -> str:
+    return normalize_request_subtype(category, raw_subtype)
+
+
 def build_subtype_classification_prompt(category: str, message_text: str) -> str:
     category = category.strip().lower()
 
     if category == "commerce":
-        options = "\n".join(f"- {s}" for s in ALLOWED_SUBTYPES["commerce"])
+        options = "\n".join(f"- {s}" for s in REQUEST_SUBTYPES["commerce"])
         return f"""
 Tu dois extraire un sous-type de commerce local à partir de la demande.
 
@@ -154,7 +202,7 @@ Réponds uniquement par le sous-type exact, sans phrase.
 """
 
     if category == "mairie":
-        options = "\n".join(f"- {s}" for s in ALLOWED_SUBTYPES["mairie"])
+        options = "\n".join(f"- {s}" for s in MAIRIE_SERVICES)
         return f"""
 Tu dois extraire un sous-type de demande communale à partir de la demande.
 
