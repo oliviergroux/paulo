@@ -166,6 +166,36 @@ def ensure_schema():
             )
             cur.execute(
                 """
+                ALTER TABLE clients
+                ADD COLUMN IF NOT EXISTS email VARCHAR(255)
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE clients
+                ADD COLUMN IF NOT EXISTS opt_in_email BOOLEAN NOT NULL DEFAULT false
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE clients
+                ADD COLUMN IF NOT EXISTS opt_in_sms BOOLEAN NOT NULL DEFAULT false
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE clients
+                ADD COLUMN IF NOT EXISTS opt_in_email_at TIMESTAMPTZ
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE clients
+                ADD COLUMN IF NOT EXISTS opt_in_sms_at TIMESTAMPTZ
+                """
+            )
+            cur.execute(
+                """
                 ALTER TABLE partners
                 ADD COLUMN IF NOT EXISTS postal_code VARCHAR(10)
                 """

@@ -2,7 +2,11 @@ import type { RequestItem } from "./types";
 
 export function formatDate(date?: string | null): string {
   if (!date) return "—";
-  return new Date(date + "Z").toLocaleString("fr-FR", {
+  const normalized =
+    date.endsWith("Z") || date.includes("+") ? date : `${date}Z`;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleString("fr-FR", {
     timeZone: "Europe/Paris",
   });
 }

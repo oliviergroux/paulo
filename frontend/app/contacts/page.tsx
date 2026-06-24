@@ -34,6 +34,7 @@ export default function ContactsPage() {
     return (
       fullName.includes(query) ||
       contact.phone?.toLowerCase().includes(query) ||
+      contact.email?.toLowerCase().includes(query) ||
       contact.address?.toLowerCase().includes(query) ||
       contact.commune_name?.toLowerCase().includes(query)
     );

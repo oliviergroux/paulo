@@ -11,6 +11,7 @@ import RequestWorkflow, { matchingPartners } from "@/components/RequestWorkflow"
 import CommuneFilter from "@/components/CommuneFilter";
 import { adminFetch } from "@/lib/api";
 import { formatDayLabel, isUrgentRequest } from "@/lib/format";
+import { resolveMairieTopic } from "@/lib/mairie-stats";
 import { mairieServiceOptions } from "@/lib/taxonomy";
 import type { PartnerSummary, RequestItem } from "@/lib/types";
 
@@ -156,7 +157,10 @@ export default function DemandesPage() {
   };
 
   const assignMairieService = async (requestId: number) => {
-    const service = selectedServices[requestId];
+    const request = requests.find((item) => item.id === requestId);
+    const service =
+      selectedServices[requestId] ||
+      (request ? resolveMairieTopic(request) : "");
     if (!service) return;
 
     await adminFetch(`/requests/${requestId}/assign-service`, {

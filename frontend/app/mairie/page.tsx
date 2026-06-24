@@ -123,7 +123,10 @@ export default function MairiePage() {
   };
 
   const assignService = async (requestId: number) => {
-    const service = selectedServices[requestId];
+    const request = requests.find((item) => item.id === requestId);
+    const service =
+      selectedServices[requestId] ||
+      (request ? resolveMairieTopic(request) : "");
     if (!service) return;
 
     await mairieFetch(`/requests/${requestId}/assign-service`, {

@@ -6,6 +6,7 @@ from psycopg2.extras import RealDictCursor, Json
 from openai import OpenAI
 from twilio.rest import Client as TwilioClient
 from typing import Any, Optional
+from datetime import datetime, timezone
 
 import os
 import json
@@ -58,6 +59,42 @@ TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
 APP_URL = os.getenv("APP_URL", "https://paulo-teal-nine.vercel.app")
 BACKEND_URL = os.getenv("BACKEND_URL", "https://paulo-backend.onrender.com")
 
+CLIENT_SELECT_FIELDS = """
+    c.id,
+    c.phone,
+    c.first_name,
+    c.last_name,
+    c.address,
+    c.email,
+    c.opt_in_email,
+    c.opt_in_sms,
+    c.opt_in_email_at,
+    c.opt_in_sms_at,
+    c.commune_id,
+    cm.name AS commune_name,
+    c.created_at,
+    c.updated_at
+"""
+
+
+def parse_optional_timestamp(raw: Optional[str]) -> Optional[datetime]:
+    if raw is None:
+        return None
+
+    text = raw.strip()
+    if not text:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+
+    return parsed
+
 
 class PartnerCreate(BaseModel):
     name: str = Field(..., min_length=2)
@@ -76,6 +113,11 @@ class ClientUpdate(BaseModel):
     last_name: Optional[str] = None
     address: Optional[str] = None
     commune_id: Optional[int] = None
+    email: Optional[str] = None
+    opt_in_email: Optional[bool] = None
+    opt_in_sms: Optional[bool] = None
+    opt_in_email_at: Optional[str] = None
+    opt_in_sms_at: Optional[str] = None
 
 
 class PartnerUpdate(BaseModel):
@@ -1461,17 +1503,9 @@ def get_clients(
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             if scope_commune_id is None:
-                cur.execute("""
+                cur.execute(f"""
                     SELECT
-                        c.id,
-                        c.phone,
-                        c.first_name,
-                        c.last_name,
-                        c.address,
-                        c.commune_id,
-                        cm.name AS commune_name,
-                        c.created_at,
-                        c.updated_at,
+                        {CLIENT_SELECT_FIELDS},
                         COUNT(r.id) AS total_requests,
                         MAX(r.created_at) AS last_request_at
                     FROM clients c
@@ -1483,6 +1517,11 @@ def get_clients(
                         c.first_name,
                         c.last_name,
                         c.address,
+                        c.email,
+                        c.opt_in_email,
+                        c.opt_in_sms,
+                        c.opt_in_email_at,
+                        c.opt_in_sms_at,
                         c.commune_id,
                         cm.name,
                         c.created_at,
@@ -1491,17 +1530,9 @@ def get_clients(
                 """)
             else:
                 cur.execute(
-                    """
+                    f"""
                     SELECT
-                        c.id,
-                        c.phone,
-                        c.first_name,
-                        c.last_name,
-                        c.address,
-                        c.commune_id,
-                        cm.name AS commune_name,
-                        c.created_at,
-                        c.updated_at,
+                        {CLIENT_SELECT_FIELDS},
                         COUNT(r.id) AS total_requests,
                         MAX(r.created_at) AS last_request_at
                     FROM clients c
@@ -1524,6 +1555,11 @@ def get_clients(
                         c.first_name,
                         c.last_name,
                         c.address,
+                        c.email,
+                        c.opt_in_email,
+                        c.opt_in_sms,
+                        c.opt_in_email_at,
+                        c.opt_in_sms_at,
                         c.commune_id,
                         cm.name,
                         c.created_at,
@@ -1544,17 +1580,9 @@ def get_client_detail(
 ):
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
+            cur.execute(f"""
                 SELECT
-                    c.id,
-                    c.phone,
-                    c.first_name,
-                    c.last_name,
-                    c.address,
-                    c.commune_id,
-                    cm.name AS commune_name,
-                    c.created_at,
-                    c.updated_at
+                    {CLIENT_SELECT_FIELDS}
                 FROM clients c
                 LEFT JOIN communes cm ON c.commune_id = cm.id
                 WHERE c.id = %s
@@ -1629,27 +1657,53 @@ def get_client_detail(
 @app.patch("/clients/{client_id}")
 @app.patch("/contacts/{client_id}")
 def update_client(client_id: int, payload: ClientUpdate, _admin=Depends(require_admin)):
+    updates = payload.model_dump(exclude_unset=True)
     fields = []
     values = []
 
-    if payload.first_name is not None:
+    if "first_name" in updates:
         fields.append("first_name = %s")
-        values.append(payload.first_name.strip() or None)
+        values.append((updates["first_name"] or "").strip() or None)
 
-    if payload.last_name is not None:
+    if "last_name" in updates:
         fields.append("last_name = %s")
-        values.append(payload.last_name.strip() or None)
+        values.append((updates["last_name"] or "").strip() or None)
 
-    if payload.address is not None:
+    if "address" in updates:
         fields.append("address = %s")
-        values.append(payload.address.strip() or None)
+        values.append((updates["address"] or "").strip() or None)
 
-    if payload.commune_id is not None:
-        commune = get_commune_by_id(payload.commune_id)
-        if not commune:
-            return {"error": "invalid_commune"}
+    if "commune_id" in updates:
+        commune_id = updates["commune_id"]
+        if commune_id is not None:
+            commune = get_commune_by_id(commune_id)
+            if not commune:
+                return {"error": "invalid_commune"}
         fields.append("commune_id = %s")
-        values.append(payload.commune_id)
+        values.append(commune_id)
+
+    if "email" in updates:
+        email = (updates["email"] or "").strip().lower() or None
+        if email and not is_valid_email(email):
+            return {"error": "invalid_email"}
+        fields.append("email = %s")
+        values.append(email)
+
+    if "opt_in_email" in updates:
+        fields.append("opt_in_email = %s")
+        values.append(bool(updates["opt_in_email"]))
+
+    if "opt_in_sms" in updates:
+        fields.append("opt_in_sms = %s")
+        values.append(bool(updates["opt_in_sms"]))
+
+    if "opt_in_email_at" in updates:
+        fields.append("opt_in_email_at = %s")
+        values.append(parse_optional_timestamp(updates["opt_in_email_at"]))
+
+    if "opt_in_sms_at" in updates:
+        fields.append("opt_in_sms_at = %s")
+        values.append(parse_optional_timestamp(updates["opt_in_sms_at"]))
 
     if not fields:
         return {"error": "no_fields"}
@@ -1670,6 +1724,11 @@ def update_client(client_id: int, payload: ClientUpdate, _admin=Depends(require_
                     first_name,
                     last_name,
                     address,
+                    email,
+                    opt_in_email,
+                    opt_in_sms,
+                    opt_in_email_at,
+                    opt_in_sms_at,
                     commune_id,
                     created_at,
                     updated_at

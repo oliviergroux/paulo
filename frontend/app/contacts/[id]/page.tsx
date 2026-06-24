@@ -12,7 +12,7 @@ import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { useRoleFetch } from "@/components/AuthenticatedShell";
 import { displayClientName, formatDate, isMairieRequest } from "@/lib/format";
-import type { ContactItem, RequestItem } from "@/lib/types";
+import type { ContactItem, ClientEditPayload, RequestItem } from "@/lib/types";
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -33,11 +33,7 @@ export default function ContactDetailPage() {
     }
   };
 
-  const saveContact = async (payload: {
-    first_name: string | null;
-    last_name: string | null;
-    address: string | null;
-  }) => {
+  const saveContact = async (payload: ClientEditPayload) => {
     const res = await fetchApi(`/contacts/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -88,7 +84,7 @@ export default function ContactDetailPage() {
             <ClientEditForm client={contact} onSave={saveContact} />
             <Link
               href="/contacts"
-              className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-800 transition"
+              className="rounded-2xl bg-slate-950 text-white px-5 py-3 text-sm font-semibold hover:bg-slate-800 transition shrink-0"
             >
               Retour
             </Link>
@@ -96,7 +92,8 @@ export default function ContactDetailPage() {
         }
       />
 
-      <div className="mb-8 bg-white border border-slate-200 rounded-[32px] shadow-sm p-6">
+      <div className="mb-8 flex flex-col xl:flex-row gap-6">
+        <div className="flex-1 bg-white border border-slate-200 rounded-[32px] shadow-sm p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
           <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
@@ -110,6 +107,14 @@ export default function ContactDetailPage() {
             </p>
             <p className="font-semibold mt-2">
               {contact.address || "Non renseignée"}
+            </p>
+          </div>
+          <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4 md:col-span-3">
+            <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
+              Email
+            </p>
+            <p className="font-semibold mt-2">
+              {contact.email || "Non renseigné"}
             </p>
           </div>
           <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
@@ -137,6 +142,33 @@ export default function ContactDetailPage() {
               Total demandes
             </p>
             <p className="font-semibold mt-2">{visibleRequests.length}</p>
+          </div>
+        </div>
+        </div>
+
+        <div className="xl:w-[320px] bg-white border border-slate-200 rounded-[32px] shadow-sm p-6">
+          <p className="text-xs uppercase tracking-wide text-slate-400 font-bold">
+            Consentements
+          </p>
+          <div className="mt-4 space-y-4 text-sm">
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+              <p className="font-semibold text-slate-900">Email</p>
+              <p className="mt-1 text-slate-600">
+                {contact.opt_in_email ? "Opt-in actif" : "Pas d'opt-in"}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Date : {formatDate(contact.opt_in_email_at)}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+              <p className="font-semibold text-slate-900">SMS</p>
+              <p className="mt-1 text-slate-600">
+                {contact.opt_in_sms ? "Opt-in actif" : "Pas d'opt-in"}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Date : {formatDate(contact.opt_in_sms_at)}
+              </p>
+            </div>
           </div>
         </div>
       </div>

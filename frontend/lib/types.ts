@@ -74,12 +74,28 @@ export type ClientItem = {
   first_name?: string | null;
   last_name?: string | null;
   address?: string | null;
+  email?: string | null;
+  opt_in_email?: boolean;
+  opt_in_sms?: boolean;
+  opt_in_email_at?: string | null;
+  opt_in_sms_at?: string | null;
   commune_id?: number | null;
   commune_name?: string | null;
   created_at?: string;
   updated_at?: string;
   total_requests?: number;
   last_request_at?: string | null;
+};
+
+export type ClientEditPayload = {
+  first_name: string | null;
+  last_name: string | null;
+  address: string | null;
+  email: string | null;
+  opt_in_email: boolean;
+  opt_in_sms: boolean;
+  opt_in_email_at: string | null;
+  opt_in_sms_at: string | null;
 };
 
 /** Alias UI — table backend reste `clients`. */
