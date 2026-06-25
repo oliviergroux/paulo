@@ -12,6 +12,7 @@ import os
 import json
 import re
 import secrets
+import html
 import requests
 
 from auth import (
@@ -29,6 +30,7 @@ from communes import (
     is_valid_email,
     resolve_commune_id_for_partner,
     resolve_commune_id_for_request,
+    resolve_commune_for_inbound_phone,
     resolve_commune_id_from_inbound_phone,
 )
 from db import ensure_schema, get_db_connection
@@ -506,20 +508,49 @@ def debug_routes():
 # TWILIO VOICE
 # =========================
 
+TWILIO_VOICE = os.getenv("TWILIO_VOICE", "Polly.Lea-Neural")
+TWILIO_VOICE_LANGUAGE = "fr-FR"
+
+
+def build_voice_greeting(commune_name: Optional[str]) -> str:
+    if commune_name:
+        return (
+            f"Bonjour, vous êtes bien sur Paulo, le service local de {commune_name}. "
+            "Après le bip, décrivez votre demande en quelques mots. "
+            "Un partenaire local ou la mairie vous recontactera rapidement."
+        )
+    return (
+        "Bonjour, vous êtes bien sur Paulo, le service de votre commune. "
+        "Après le bip, décrivez votre demande en quelques mots. "
+        "Un partenaire local ou la mairie vous recontactera rapidement."
+    )
+
+
+def twilio_say(text: str) -> str:
+    escaped = html.escape(text, quote=False)
+    return (
+        f'<Say language="{TWILIO_VOICE_LANGUAGE}" voice="{TWILIO_VOICE}">'
+        f"{escaped}</Say>"
+    )
+
+
 @app.post("/twilio/voice")
 async def twilio_voice(request: Request):
-    twiml = f"""
-    <Response>
-        <Say language="fr-FR" voice="alice">
-            Bonjour, vous êtes sur Paulo. Expliquez votre demande après le bip.
-        </Say>
-        <Record 
-            maxLength="120" 
-            playBeep="true"
-            action="{BACKEND_URL}/twilio/recording"
-        />
-    </Response>
-    """
+    form = await request.form()
+    called = form.get("To")
+    commune = resolve_commune_for_inbound_phone(called)
+    commune_name = commune.get("name") if commune else None
+    greeting = build_voice_greeting(commune_name)
+
+    twiml = f"""<Response>
+    {twilio_say(greeting)}
+    <Record
+        maxLength="120"
+        playBeep="true"
+        action="{BACKEND_URL}/twilio/recording"
+    />
+</Response>
+"""
     return Response(content=twiml, media_type="application/xml")
 
 
@@ -547,14 +578,15 @@ async def recording(request: Request):
 
     create_request_from_message(caller, transcript.text, inbound_to=called)
 
-    return Response(
-        content="""
-        <Response>
-            <Say>Merci, votre demande a bien été enregistrée.</Say>
-        </Response>
-        """,
-        media_type="application/xml"
+    goodbye = (
+        "Merci, votre demande a bien été enregistrée. "
+        "Nous vous recontacterons très prochainement."
     )
+    twiml = f"""<Response>
+    {twilio_say(goodbye)}
+</Response>
+"""
+    return Response(content=twiml, media_type="application/xml")
 
 
 # =========================

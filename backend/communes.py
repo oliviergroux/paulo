@@ -137,6 +137,15 @@ def resolve_commune_id_from_inbound_phone(inbound_to: Optional[str]) -> Optional
     return row["id"] if row else None
 
 
+def resolve_commune_for_inbound_phone(inbound_to: Optional[str]) -> Optional[dict]:
+    commune_id = resolve_commune_id_from_inbound_phone(inbound_to)
+    if commune_id is None:
+        commune_id = get_default_commune_id()
+    if commune_id is None:
+        return None
+    return get_commune_by_id(commune_id)
+
+
 def is_valid_email(email: str) -> bool:
     cleaned = (email or "").strip()
     return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", cleaned))
