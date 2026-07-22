@@ -28,3 +28,37 @@ class DictionaryImportResult(BaseModel):
     table_count: int
     column_count: int
     source_file_name: str
+
+
+class McdColumn(BaseModel):
+    name: str
+    data_type: Optional[str] = None
+    description: Optional[str] = None
+
+
+class McdForeignKey(McdColumn):
+    references_table: Optional[str] = None
+    references_column: Optional[str] = None
+
+
+class McdTable(BaseModel):
+    name: str
+    column_count: int
+    primary_keys: list[McdColumn] = []
+    foreign_keys: list[McdForeignKey] = []
+    highlight_columns: list[McdColumn] = []
+    other_columns: list[McdColumn] = []
+
+
+class McdRelationship(BaseModel):
+    from_table: str
+    from_column: str
+    to_table: str
+    to_column: Optional[str] = None
+
+
+class McdGraph(BaseModel):
+    table_count: int
+    relationship_count: int
+    tables: list[McdTable]
+    relationships: list[McdRelationship]

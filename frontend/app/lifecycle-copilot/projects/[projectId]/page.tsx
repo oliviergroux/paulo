@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import DatasetImportPanel from "@/components/lifecycle-copilot/datasets/DatasetImportPanel";
 import DictionaryImportPanel from "@/components/lifecycle-copilot/dictionary/DictionaryImportPanel";
+import McdViewer from "@/components/lifecycle-copilot/mcd/McdViewer";
 import LifecycleCopilotShell from "@/components/lifecycle-copilot/shell/LifecycleCopilotShell";
 import { lcFetch } from "@/lib/lifecycle-copilot/api";
 import type {
@@ -17,7 +18,7 @@ import type {
   LcProjectDetail,
 } from "@/lib/lifecycle-copilot/types/project";
 
-type TabId = "overview" | "dictionary" | "datasets";
+type TabId = "overview" | "dictionary" | "datasets" | "mcd";
 
 function formatBytes(value: number) {
   if (value < 1024) return `${value} o`;
@@ -36,6 +37,7 @@ export default function LifecycleCopilotProjectPage() {
   const [selectedDatasetId, setSelectedDatasetId] = useState<number | null>(null);
   const [profiles, setProfiles] = useState<LcColumnProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mcdRefreshKey, setMcdRefreshKey] = useState(0);
 
   const selectedDataset = useMemo(
     () => datasets.find((dataset) => dataset.id === selectedDatasetId) || null,
@@ -148,6 +150,7 @@ export default function LifecycleCopilotProjectPage() {
               [
                 ["overview", "Vue d'ensemble"],
                 ["dictionary", "Dictionnaire"],
+                ["mcd", "MCD"],
                 ["datasets", "Datasets"],
               ] as const
             ).map(([id, label]) => (
@@ -185,7 +188,13 @@ export default function LifecycleCopilotProjectPage() {
 
           {tab === "dictionary" ? (
             <div className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.1fr] gap-6">
-              <DictionaryImportPanel projectId={projectId} onImported={loadProject} />
+              <DictionaryImportPanel
+                projectId={projectId}
+                onImported={() => {
+                  setMcdRefreshKey((value) => value + 1);
+                  loadProject();
+                }}
+              />
               <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm overflow-hidden">
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">
                   Dictionnaire ({entries.length} colonnes)
@@ -223,6 +232,10 @@ export default function LifecycleCopilotProjectPage() {
                 )}
               </div>
             </div>
+          ) : null}
+
+          {tab === "mcd" ? (
+            <McdViewer projectId={projectId} refreshKey={mcdRefreshKey} />
           ) : null}
 
           {tab === "datasets" ? (

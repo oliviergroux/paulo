@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from lifecycle_copilot.dependencies import require_admin
-from lifecycle_copilot.modules.dictionary import service
+from lifecycle_copilot.modules.dictionary import mcd, service
 from lifecycle_copilot.modules.dictionary.schemas import (
     DictionaryEntry,
     DictionaryImportResult,
     DictionaryTableSummary,
+    McdGraph,
 )
 
 router = APIRouter(
@@ -29,6 +30,14 @@ def list_dictionary_tables(
     _admin=Depends(require_admin),
 ) -> list[DictionaryTableSummary]:
     return service.list_tables(project_id)
+
+
+@router.get("/mcd", response_model=McdGraph)
+def get_dictionary_mcd(
+    project_id: int,
+    _admin=Depends(require_admin),
+) -> McdGraph:
+    return mcd.build_mcd(project_id)
 
 
 @router.post("/import", response_model=DictionaryImportResult)

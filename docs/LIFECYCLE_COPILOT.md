@@ -48,3 +48,4 @@ Frontend proxy : `/api/lifecycle-copilot/v1/*`
 - PR2 ✅ Import dictionnaire CSV/XLSX
 - PR3 ✅ Import datasets + object storage (fallback copie locale DB)
 - PR4 ✅ Profiling basique colonnes
+- PR5 ✅ MCD interactif (dictionnaire PK/FK)

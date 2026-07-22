@@ -34,6 +34,7 @@ def meta(_admin=Depends(require_admin)) -> dict:
             "dictionary": "ready",
             "datasets": "ready",
             "profiling": "ready",
+            "mcd": "ready",
         },
         "import_formats": ["csv", "xlsx"],
         "object_storage_configured": object_storage_configured(),
