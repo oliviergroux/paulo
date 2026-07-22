@@ -1,20 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+
+import ProjectCreateForm from "@/components/lifecycle-copilot/projects/ProjectCreateForm";
 import LifecycleCopilotShell from "@/components/lifecycle-copilot/shell/LifecycleCopilotShell";
 import { lcFetch } from "@/lib/lifecycle-copilot/api";
-import type { LcMeta } from "@/lib/lifecycle-copilot/types/project";
+import type { LcMeta, LcProjectSummary } from "@/lib/lifecycle-copilot/types/project";
 
 export default function LifecycleCopilotHomePage() {
   const [meta, setMeta] = useState<LcMeta | null>(null);
+  const [projects, setProjects] = useState<LcProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    lcFetch("/v1/meta")
-      .then((res) => res.json())
-      .then((data) => setMeta(data))
-      .finally(() => setLoading(false));
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [metaResponse, projectsResponse] = await Promise.all([
+        lcFetch("/v1/meta"),
+        lcFetch("/v1/projects"),
+      ]);
+      setMeta(await metaResponse.json());
+      setProjects(await projectsResponse.json());
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   return (
     <LifecycleCopilotShell activeNav="projects">
@@ -26,8 +41,8 @@ export default function LifecycleCopilotHomePage() {
           Projets CRM
         </h1>
         <p className="text-teal-50/90 mt-3 max-w-2xl text-sm md:text-base leading-6">
-          Préparez vos audits lifecycle : dictionnaire de données, imports CSV/XLSX,
-          profilage et futures recommandations IA.
+          Dictionnaire de données, imports CSV/XLSX, profilage colonnes et base pour
+          les futures recommandations IA.
         </p>
       </div>
 
@@ -36,8 +51,9 @@ export default function LifecycleCopilotHomePage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Projets
           </p>
-          <p className="text-3xl font-bold mt-2 text-slate-900">0</p>
-          <p className="text-sm text-slate-500 mt-2">CRUD disponible en PR1</p>
+          <p className="text-3xl font-bold mt-2 text-slate-900">
+            {loading ? "…" : projects.length}
+          </p>
         </div>
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -54,17 +70,55 @@ export default function LifecycleCopilotHomePage() {
               ? "…"
               : meta?.object_storage_configured
               ? "Configuré"
-              : "À configurer"}
+              : "Copie locale DB"}
           </p>
         </div>
       </div>
 
-      <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-10 text-center">
-        <p className="text-lg font-semibold text-slate-900">Aucun projet pour l&apos;instant</p>
-        <p className="text-sm text-slate-500 mt-2 max-w-xl mx-auto leading-6">
-          Le squelette est en place. Prochaine étape : création de projet, puis import
-          dictionnaire et fichiers lourds via object storage.
-        </p>
+      <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-6">
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-slate-900">Vos projets</h2>
+          </div>
+
+          {loading ? (
+            <div className="rounded-3xl border border-slate-200 bg-white p-8 text-slate-500">
+              Chargement…
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white/70 p-10 text-center">
+              <p className="text-lg font-semibold text-slate-900">Aucun projet</p>
+              <p className="text-sm text-slate-500 mt-2">
+                Créez un premier projet pour importer dictionnaire et datasets.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {projects.map((project) => (
+                <Link
+                  key={project.id}
+                  href={`/lifecycle-copilot/projects/${project.id}`}
+                  className="block rounded-3xl border border-slate-200 bg-white p-5 shadow-sm hover:border-teal-300 hover:shadow-md transition"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-lg font-semibold text-slate-900">{project.name}</p>
+                      <p className="text-sm text-slate-500 mt-1">
+                        {[project.client_name, project.crm_platform].filter(Boolean).join(" · ") ||
+                          "Projet sans client renseigné"}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
+                      {project.status}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <ProjectCreateForm onCreated={loadData} />
       </div>
     </LifecycleCopilotShell>
   );

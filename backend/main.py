@@ -492,6 +492,9 @@ app.include_router(
 @app.on_event("startup")
 def startup():
     ensure_schema()
+    from lifecycle_copilot.db.schema import ensure_lc_schema
+
+    ensure_lc_schema()
 
 
 # =========================

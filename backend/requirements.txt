@@ -5,3 +5,5 @@ openai
 requests
 psycopg2-binary
 twilio
+boto3
+openpyxl

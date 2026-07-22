@@ -43,8 +43,8 @@ Frontend proxy : `/api/lifecycle-copilot/v1/*`
 
 ## Roadmap PRs
 
-- PR0 ✅ Squelette (cette base)
-- PR1 CRUD projets + migration `lc_projects`
-- PR2 Import dictionnaire CSV/XLSX
-- PR3 Import datasets + object storage
-- PR4 Profiling basique
+- PR0 ✅ Squelette
+- PR1 ✅ CRUD projets + `lc_projects`
+- PR2 ✅ Import dictionnaire CSV/XLSX
+- PR3 ✅ Import datasets + object storage (fallback copie locale DB)
+- PR4 ✅ Profiling basique colonnes

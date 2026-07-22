@@ -53,9 +53,9 @@ export default function LifecycleCopilotShell({
 
           <div className="mt-auto p-4 space-y-2">
             <div className="rounded-3xl bg-white/5 border border-white/10 p-4">
-              <p className="text-sm font-medium text-slate-200">MVP en construction</p>
+              <p className="text-sm font-medium text-slate-200">Modules actifs</p>
               <p className="text-xs text-slate-400 mt-1">
-                Import dictionnaire et datasets CSV/XLSX à venir.
+                Projets, dictionnaire CSV/XLSX, datasets et profilage colonnes.
               </p>
             </div>
             <button
