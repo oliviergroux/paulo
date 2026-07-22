@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import ChatPanel from "@/components/lifecycle-copilot/chat/ChatPanel";
 import DatasetImportPanel from "@/components/lifecycle-copilot/datasets/DatasetImportPanel";
 import DictionaryImportPanel from "@/components/lifecycle-copilot/dictionary/DictionaryImportPanel";
+import DocumentsPanel from "@/components/lifecycle-copilot/documents/DocumentsPanel";
 import InsightsPanel from "@/components/lifecycle-copilot/insights/InsightsPanel";
 import MappingPanel from "@/components/lifecycle-copilot/mapping/MappingPanel";
 import McdViewer from "@/components/lifecycle-copilot/mcd/McdViewer";
@@ -21,7 +23,7 @@ import type {
   LcProjectDetail,
 } from "@/lib/lifecycle-copilot/types/project";
 
-type TabId = "overview" | "dictionary" | "mcd" | "datasets" | "mapping" | "quality" | "insights";
+type TabId = "overview" | "dictionary" | "mcd" | "datasets" | "mapping" | "quality" | "insights" | "documents" | "assistant";
 
 function formatBytes(value: number) {
   if (value < 1024) return `${value} o`;
@@ -165,6 +167,8 @@ export default function LifecycleCopilotProjectPage() {
                 ["mapping", "Mapping"],
                 ["quality", "Qualité"],
                 ["insights", "Synthèse"],
+                ["documents", "Documents"],
+                ["assistant", "Assistant"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -352,6 +356,10 @@ export default function LifecycleCopilotProjectPage() {
           {tab === "insights" ? (
             <InsightsPanel projectId={projectId} refreshKey={analysisRefreshKey} />
           ) : null}
+
+          {tab === "documents" ? <DocumentsPanel projectId={projectId} /> : null}
+
+          {tab === "assistant" ? <ChatPanel projectId={projectId} /> : null}
         </>
       )}
     </LifecycleCopilotShell>

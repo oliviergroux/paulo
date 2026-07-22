@@ -52,3 +52,7 @@ Frontend proxy : `/api/lifecycle-copilot/v1/*`
 - PR6 ✅ Mapping auto dictionnaire ↔ exports
 - PR7 ✅ Score qualité + alertes data
 - PR8 ✅ Synthèse IA + recommandations lifecycle
+- PR9 ✅ Import PDF appel d'offre + extraction texte
+- PR10 ✅ Analyse AO croisée avec audit CRM
+- PR11 ✅ Chat consultant contextualisé
+- PR12 ✅ RAG embeddings + citations page/section
