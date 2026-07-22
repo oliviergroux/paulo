@@ -6,7 +6,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import DatasetImportPanel from "@/components/lifecycle-copilot/datasets/DatasetImportPanel";
 import DictionaryImportPanel from "@/components/lifecycle-copilot/dictionary/DictionaryImportPanel";
+import InsightsPanel from "@/components/lifecycle-copilot/insights/InsightsPanel";
+import MappingPanel from "@/components/lifecycle-copilot/mapping/MappingPanel";
 import McdViewer from "@/components/lifecycle-copilot/mcd/McdViewer";
+import QualityPanel from "@/components/lifecycle-copilot/quality/QualityPanel";
 import LifecycleCopilotShell from "@/components/lifecycle-copilot/shell/LifecycleCopilotShell";
 import { lcFetch } from "@/lib/lifecycle-copilot/api";
 import type {
@@ -18,7 +21,7 @@ import type {
   LcProjectDetail,
 } from "@/lib/lifecycle-copilot/types/project";
 
-type TabId = "overview" | "dictionary" | "datasets" | "mcd";
+type TabId = "overview" | "dictionary" | "mcd" | "datasets" | "mapping" | "quality" | "insights";
 
 function formatBytes(value: number) {
   if (value < 1024) return `${value} o`;
@@ -38,6 +41,12 @@ export default function LifecycleCopilotProjectPage() {
   const [profiles, setProfiles] = useState<LcColumnProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [mcdRefreshKey, setMcdRefreshKey] = useState(0);
+  const [analysisRefreshKey, setAnalysisRefreshKey] = useState(0);
+
+  function bumpAnalysis() {
+    setMcdRefreshKey((value) => value + 1);
+    setAnalysisRefreshKey((value) => value + 1);
+  }
 
   const selectedDataset = useMemo(
     () => datasets.find((dataset) => dataset.id === selectedDatasetId) || null,
@@ -92,6 +101,7 @@ export default function LifecycleCopilotProjectPage() {
     await loadProject();
     setSelectedDatasetId(dataset.id);
     setProfiles(dataset.profiles || []);
+    bumpAnalysis();
     setTab("datasets");
   }
 
@@ -152,6 +162,9 @@ export default function LifecycleCopilotProjectPage() {
                 ["dictionary", "Dictionnaire"],
                 ["mcd", "MCD"],
                 ["datasets", "Datasets"],
+                ["mapping", "Mapping"],
+                ["quality", "Qualité"],
+                ["insights", "Synthèse"],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -191,7 +204,7 @@ export default function LifecycleCopilotProjectPage() {
               <DictionaryImportPanel
                 projectId={projectId}
                 onImported={() => {
-                  setMcdRefreshKey((value) => value + 1);
+                  bumpAnalysis();
                   loadProject();
                 }}
               />
@@ -326,6 +339,18 @@ export default function LifecycleCopilotProjectPage() {
                 </div>
               </div>
             </div>
+          ) : null}
+
+          {tab === "mapping" ? (
+            <MappingPanel projectId={projectId} refreshKey={analysisRefreshKey} />
+          ) : null}
+
+          {tab === "quality" ? (
+            <QualityPanel projectId={projectId} refreshKey={analysisRefreshKey} />
+          ) : null}
+
+          {tab === "insights" ? (
+            <InsightsPanel projectId={projectId} refreshKey={analysisRefreshKey} />
           ) : null}
         </>
       )}

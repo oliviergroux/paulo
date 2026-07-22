@@ -49,3 +49,6 @@ Frontend proxy : `/api/lifecycle-copilot/v1/*`
 - PR3 ✅ Import datasets + object storage (fallback copie locale DB)
 - PR4 ✅ Profiling basique colonnes
 - PR5 ✅ MCD interactif (dictionnaire PK/FK)
+- PR6 ✅ Mapping auto dictionnaire ↔ exports
+- PR7 ✅ Score qualité + alertes data
+- PR8 ✅ Synthèse IA + recommandations lifecycle

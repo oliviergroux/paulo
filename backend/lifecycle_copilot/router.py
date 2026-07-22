@@ -4,6 +4,8 @@ from lifecycle_copilot.config import object_storage_configured
 from lifecycle_copilot.dependencies import require_admin
 from lifecycle_copilot.modules.datasets.router import router as datasets_router
 from lifecycle_copilot.modules.dictionary.router import router as dictionary_router
+from lifecycle_copilot.modules.insights.router import router as insights_router
+from lifecycle_copilot.modules.mapping.router import router as mapping_router
 from lifecycle_copilot.modules.profiling.router import router as profiling_router
 from lifecycle_copilot.modules.projects.router import router as projects_router
 
@@ -12,6 +14,8 @@ router.include_router(projects_router)
 router.include_router(dictionary_router)
 router.include_router(datasets_router)
 router.include_router(profiling_router)
+router.include_router(mapping_router)
+router.include_router(insights_router)
 
 
 @router.get("/health")
@@ -35,6 +39,9 @@ def meta(_admin=Depends(require_admin)) -> dict:
             "datasets": "ready",
             "profiling": "ready",
             "mcd": "ready",
+            "mapping": "ready",
+            "quality": "ready",
+            "insights": "ready",
         },
         "import_formats": ["csv", "xlsx"],
         "object_storage_configured": object_storage_configured(),

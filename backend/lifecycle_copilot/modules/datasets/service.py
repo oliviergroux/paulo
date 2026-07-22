@@ -95,6 +95,18 @@ def import_dataset_file(
     except Exception:
         dataset["profiles"] = []
 
+    from lifecycle_copilot.modules.mapping import service as mapping_service
+    from lifecycle_copilot.modules.quality import service as quality_service
+
+    try:
+        mapping_service.run_mapping(project_id, dataset["id"])
+    except Exception:
+        pass
+    try:
+        quality_service.compute_quality(project_id)
+    except Exception:
+        pass
+
     return dataset
 
 

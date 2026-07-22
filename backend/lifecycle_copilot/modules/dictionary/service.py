@@ -74,7 +74,14 @@ def import_dictionary_file(
     if not entries:
         raise ValueError("no_valid_rows")
 
-    return repository.replace_entries(project_id, entries, filename)
+    result = repository.replace_entries(project_id, entries, filename)
+    from lifecycle_copilot.modules.mapping import service as mapping_service
+
+    try:
+        mapping_service.run_mapping(project_id)
+    except Exception:
+        pass
+    return result
 
 
 def list_entries(project_id: int, table_name: Optional[str] = None):
