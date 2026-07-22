@@ -34,6 +34,7 @@ from communes import (
     resolve_commune_id_from_inbound_phone,
 )
 from db import ensure_schema, get_db_connection
+from lifecycle_copilot.router import router as lifecycle_copilot_router
 from partner_validation import validate_partner_application
 from taxonomy import (
     PARTNER_CATEGORIES,
@@ -480,6 +481,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.include_router(
+    lifecycle_copilot_router,
+    prefix="/lifecycle-copilot/v1",
 )
 
 

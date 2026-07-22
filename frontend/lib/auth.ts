@@ -141,6 +141,7 @@ export const ADMIN_ONLY_PATHS = [
   "/partners",
   "/devenir-partenaire",
   "/communes",
+  "/lifecycle-copilot",
 ];
 
 export function isAdminOnlyPath(pathname: string): boolean {
@@ -149,6 +150,7 @@ export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname.startsWith("/partners")) return true;
   if (pathname === "/devenir-partenaire") return true;
   if (pathname.startsWith("/communes")) return true;
+  if (pathname.startsWith("/lifecycle-copilot")) return true;
   return false;
 }
 
