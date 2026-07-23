@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 
 import { SESSION_COOKIE, getSessionRole } from "@/lib/auth";
 import { getAdminApiKey, getBackendUrl } from "@/lib/backend";
@@ -12,11 +11,24 @@ async function proxyLifecycleCopilotRequest(
   request: NextRequest,
   pathSegments: string[]
 ) {
-  const cookieStore = await cookies();
-  const role = await getSessionRole(cookieStore.get(SESSION_COOKIE)?.value);
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  const role = await getSessionRole(token);
 
   if (role !== "admin") {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: "unauthorized", detail: "admin_session_required" },
+      { status: 401 }
+    );
+  }
+
+  let adminApiKey: string;
+  try {
+    adminApiKey = getAdminApiKey();
+  } catch {
+    return NextResponse.json(
+      { error: "misconfigured", detail: "admin_api_key_missing" },
+      { status: 503 }
+    );
   }
 
   const backendPath = `/lifecycle-copilot/${pathSegments.join("/")}`;
@@ -27,7 +39,7 @@ async function proxyLifecycleCopilotRequest(
   });
 
   const headers = new Headers();
-  headers.set("X-Admin-Key", getAdminApiKey());
+  headers.set("X-Admin-Key", adminApiKey);
 
   const contentType = request.headers.get("content-type");
   if (contentType) {

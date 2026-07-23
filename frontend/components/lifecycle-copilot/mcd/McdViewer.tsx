@@ -16,7 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import McdTableNode from "@/components/lifecycle-copilot/mcd/TableNode";
-import { lcFetch } from "@/lib/lifecycle-copilot/api";
+import { lcFetch, readLcError } from "@/lib/lifecycle-copilot/api";
 import { buildMcdFlowGraph } from "@/lib/lifecycle-copilot/mcd/buildGraph";
 import type { LcMcdGraph, LcMcdRelationship } from "@/lib/lifecycle-copilot/types/mcd";
 
@@ -49,6 +49,7 @@ export default function McdViewer({ projectId, refreshKey = 0 }: McdViewerProps)
   const [formFromCol, setFormFromCol] = useState("");
   const [formToCol, setFormToCol] = useState("");
   const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -98,6 +99,7 @@ export default function McdViewer({ projectId, refreshKey = 0 }: McdViewerProps)
     to_column?: string;
   }) {
     setSaving(true);
+    setActionError(null);
     try {
       const response = await lcFetch(`/v1/projects/${projectId}/dictionary/mcd/relationships`, {
         method: "POST",
@@ -109,11 +111,21 @@ export default function McdViewer({ projectId, refreshKey = 0 }: McdViewerProps)
           to_column: payload.to_column || null,
         }),
       });
-      if (!response.ok) throw new Error("Impossible de créer la relation");
+      if (!response.ok) {
+        const message = await readLcError(response);
+        if (response.status === 401) {
+          throw new Error("Session expirée ou accès admin requis. Reconnectez-vous sur /login.");
+        }
+        throw new Error(message);
+      }
       setPending(null);
       setFromColumn("");
       setToColumn("");
       await loadGraph();
+    } catch (createError) {
+      setActionError(
+        createError instanceof Error ? createError.message : "Impossible de créer la relation"
+      );
     } finally {
       setSaving(false);
     }
@@ -204,6 +216,12 @@ export default function McdViewer({ projectId, refreshKey = 0 }: McdViewerProps)
           </label>
         </div>
       </div>
+
+      {actionError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {actionError}
+        </div>
+      ) : null}
 
       {editMode ? (
         <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">

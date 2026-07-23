@@ -2,6 +2,7 @@ export async function lcFetch(path: string, init?: RequestInit) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return fetch(`/api/lifecycle-copilot${normalizedPath}`, {
     ...init,
+    credentials: "same-origin",
     cache: "no-store",
   });
 }
