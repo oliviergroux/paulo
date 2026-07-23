@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from lifecycle_copilot.dependencies import require_admin
-from lifecycle_copilot.modules.dictionary import mcd, service
+from lifecycle_copilot.modules.dictionary import mcd, mcd_relationships, service
 from lifecycle_copilot.modules.dictionary.schemas import (
     DictionaryEntry,
     DictionaryImportResult,
     DictionaryTableSummary,
     McdGraph,
+    McdRelationship,
+    McdRelationshipCreate,
 )
 
 router = APIRouter(
@@ -38,6 +40,28 @@ def get_dictionary_mcd(
     _admin=Depends(require_admin),
 ) -> McdGraph:
     return mcd.build_mcd(project_id)
+
+
+@router.post("/mcd/relationships", response_model=McdRelationship, status_code=201)
+def create_mcd_relationship(
+    project_id: int,
+    payload: McdRelationshipCreate,
+    _admin=Depends(require_admin),
+) -> McdRelationship:
+    return mcd_relationships.create_manual_relationship(
+        project_id,
+        payload.model_dump(),
+    )
+
+
+@router.delete("/mcd/relationships/{relationship_id}", status_code=204)
+def delete_mcd_relationship(
+    project_id: int,
+    relationship_id: int,
+    _admin=Depends(require_admin),
+) -> Response:
+    mcd_relationships.delete_manual_relationship(project_id, relationship_id)
+    return Response(status_code=204)
 
 
 @router.post("/import", response_model=DictionaryImportResult)

@@ -31,21 +31,29 @@ export function buildMcdFlowGraph(
     const highlighted =
       options.selectedTable === relationship.from_table ||
       options.selectedTable === relationship.to_table;
+    const isManual = relationship.source === "manual";
 
-    const label = relationship.to_column
-      ? `${relationship.from_column} → ${relationship.to_column}`
-      : relationship.from_column;
+    const fromCol = relationship.from_column?.trim();
+    const toCol = relationship.to_column?.trim();
+    let label = "relation";
+    if (fromCol && toCol) label = `${fromCol} → ${toCol}`;
+    else if (fromCol) label = fromCol;
+    else if (toCol) label = `→ ${toCol}`;
 
     return {
-      id: `edge-${index}-${relationship.from_table}-${relationship.to_table}`,
+      id:
+        relationship.id != null
+          ? `manual-${relationship.id}`
+          : `edge-${index}-${relationship.from_table}-${relationship.to_table}`,
       source: relationship.from_table,
       target: relationship.to_table,
       label,
       type: "smoothstep",
       animated: highlighted,
       style: {
-        stroke: highlighted ? "#0d9488" : "#64748b",
-        strokeWidth: highlighted ? 2.5 : 1.5,
+        stroke: highlighted ? "#0d9488" : isManual ? "#0f766e" : "#64748b",
+        strokeWidth: highlighted ? 2.5 : isManual ? 2 : 1.5,
+        strokeDasharray: isManual ? "6 4" : undefined,
       },
       labelStyle: {
         fill: highlighted ? "#0f766e" : "#475569",
@@ -56,6 +64,7 @@ export function buildMcdFlowGraph(
         fill: "#ffffff",
         fillOpacity: 0.92,
       },
+      data: { relationship },
     };
   });
 

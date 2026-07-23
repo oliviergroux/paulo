@@ -1,6 +1,6 @@
 from typing import Any
 
-from lifecycle_copilot.modules.dictionary import repository
+from lifecycle_copilot.modules.dictionary import mcd_relationships, repository
 
 
 def _normalize_table_name(value: str) -> str:
@@ -60,10 +60,12 @@ def build_mcd(project_id: int) -> dict[str, Any]:
                     seen_edges.add(edge_key)
                     relationships.append(
                         {
+                            "id": None,
                             "from_table": table_name,
                             "from_column": entry["column_name"],
                             "to_table": foreign_table,
                             "to_column": foreign_column,
+                            "source": "dictionary",
                         }
                     )
                 if foreign_table not in tables:
@@ -81,6 +83,29 @@ def build_mcd(project_id: int) -> dict[str, Any]:
             if len(table["highlight_columns"]) < 3:
                 table["highlight_columns"].append(column)
 
+    for manual in mcd_relationships.list_manual_relationships(project_id):
+        edge_key = (
+            manual["from_table"],
+            manual.get("from_column") or "",
+            manual["to_table"],
+            manual.get("to_column") or "",
+        )
+        if edge_key in seen_edges:
+            continue
+        seen_edges.add(edge_key)
+        relationships.append(manual)
+        to_table = manual["to_table"]
+        if to_table not in tables:
+            tables[to_table] = {
+                "name": to_table,
+                "column_count": 0,
+                "primary_keys": [],
+                "foreign_keys": [],
+                "highlight_columns": [],
+                "other_columns": [],
+                "inferred": True,
+            }
+
     table_list = sorted(tables.values(), key=lambda item: item["name"].lower())
     for table in table_list:
         table.pop("inferred", None)
@@ -88,6 +113,12 @@ def build_mcd(project_id: int) -> dict[str, Any]:
     return {
         "table_count": len(table_list),
         "relationship_count": len(relationships),
+        "dictionary_relationship_count": sum(
+            1 for rel in relationships if rel.get("source") == "dictionary"
+        ),
+        "manual_relationship_count": sum(
+            1 for rel in relationships if rel.get("source") == "manual"
+        ),
         "tables": table_list,
         "relationships": relationships,
     }

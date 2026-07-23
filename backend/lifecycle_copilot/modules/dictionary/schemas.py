@@ -51,8 +51,17 @@ class McdTable(BaseModel):
 
 
 class McdRelationship(BaseModel):
+    id: Optional[int] = None
     from_table: str
-    from_column: str
+    from_column: Optional[str] = None
+    to_table: str
+    to_column: Optional[str] = None
+    source: str = "dictionary"
+
+
+class McdRelationshipCreate(BaseModel):
+    from_table: str
+    from_column: Optional[str] = None
     to_table: str
     to_column: Optional[str] = None
 
@@ -60,5 +69,7 @@ class McdRelationship(BaseModel):
 class McdGraph(BaseModel):
     table_count: int
     relationship_count: int
+    dictionary_relationship_count: int = 0
+    manual_relationship_count: int = 0
     tables: list[McdTable]
     relationships: list[McdRelationship]
