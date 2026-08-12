@@ -1,4 +1,8 @@
-export const PARTNER_CATEGORIES = ["commerce", "service_local", "transport"] as const;
+export const PARTNER_CATEGORIES = ["commerce", "artisan", "transport"] as const;
+
+export const CATEGORY_ALIASES: Record<string, string> = {
+  service_local: "artisan",
+};
 
 export const PARTNER_SUBTYPES: Record<string, string[]> = {
   commerce: [
@@ -21,7 +25,7 @@ export const PARTNER_SUBTYPES: Record<string, string[]> = {
     "optique",
     "autre",
   ],
-  service_local: [
+  artisan: [
     "plombier",
     "electricien",
     "maçon",
@@ -89,6 +93,12 @@ export const SUBTYPE_LABELS: Record<string, string> = {
   autre: "Autre",
 };
 
+export function normalizeRequestCategory(category?: string | null): string {
+  if (!category?.trim()) return "";
+  const key = category.trim().toLowerCase();
+  return CATEGORY_ALIASES[key] || key;
+}
+
 export function subtypeLabel(subtype: string): string {
   return SUBTYPE_LABELS[subtype] || subtype.replace(/_/g, " ");
 }
@@ -127,14 +137,16 @@ export function normalizeMairieTopicKey(
 
 export const CATEGORY_LABELS: Record<string, string> = {
   commerce: "Commerce",
-  service_local: "Service local",
+  artisan: "Artisans",
   transport: "Transport",
   mairie: "Collectivité",
   autre: "Autre",
+  service_local: "Artisans",
 };
 
 export const PARTNER_CATEGORY_LABELS: Record<string, string> = {
   commerce: "Commerce",
-  service_local: "Service local",
+  artisan: "Artisans",
   transport: "Transport",
+  service_local: "Artisans",
 };

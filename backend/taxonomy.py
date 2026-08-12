@@ -1,6 +1,10 @@
-PARTNER_CATEGORIES = ["commerce", "service_local", "transport"]
+PARTNER_CATEGORIES = ["commerce", "artisan", "transport"]
 
-REQUEST_CATEGORIES = ["commerce", "service_local", "transport", "mairie", "autre"]
+REQUEST_CATEGORIES = ["commerce", "artisan", "transport", "mairie", "autre"]
+
+CATEGORY_ALIASES = {
+    "service_local": "artisan",
+}
 
 PARTNER_SUBTYPES = {
     "commerce": [
@@ -23,7 +27,7 @@ PARTNER_SUBTYPES = {
         "optique",
         "autre",
     ],
-    "service_local": [
+    "artisan": [
         "plombier",
         "electricien",
         "maçon",
@@ -95,8 +99,17 @@ ALLOWED_CATEGORIES = PARTNER_CATEGORIES
 ALLOWED_SUBTYPES = PARTNER_SUBTYPES
 
 
-def validate_partner_category_subtype(category: str, subtype: str):
+def normalize_partner_category(category: str) -> str:
     category = category.strip().lower()
+    return CATEGORY_ALIASES.get(category, category)
+
+
+def normalize_request_category(category: str) -> str:
+    return normalize_partner_category(category)
+
+
+def validate_partner_category_subtype(category: str, subtype: str):
+    category = normalize_partner_category(category)
     subtype = subtype.strip().lower()
 
     if category not in PARTNER_CATEGORIES:
@@ -120,7 +133,7 @@ def validate_mairie_service(service: str):
 
 
 def normalize_partner_subtype(category: str, raw_subtype: str) -> str:
-    category = category.strip().lower()
+    category = normalize_partner_category(category)
     subtype = raw_subtype.strip().lower().replace(" ", "_").replace("-", "_")
 
     aliases = {
@@ -151,7 +164,7 @@ def normalize_partner_subtype(category: str, raw_subtype: str) -> str:
 
 
 def normalize_request_subtype(category: str, raw_subtype: str) -> str:
-    category = category.strip().lower()
+    category = normalize_request_category(category)
     subtype = raw_subtype.strip().lower().replace(" ", "_").replace("-", "_")
 
     if category == "mairie":
@@ -183,7 +196,7 @@ def normalize_subtype(category: str, raw_subtype: str) -> str:
 
 
 def build_subtype_classification_prompt(category: str, message_text: str) -> str:
-    category = category.strip().lower()
+    category = normalize_request_category(category)
 
     if category == "commerce":
         options = "\n".join(f"- {s}" for s in REQUEST_SUBTYPES["commerce"])
@@ -217,9 +230,9 @@ Demande : {message_text}
 Réponds uniquement par le sous-type exact, sans phrase.
 """
 
-    if category == "service_local":
+    if category == "artisan":
         return f"""
-Tu dois extraire un sous-type précis à partir de la demande.
+Tu dois extraire un sous-type d'artisan à partir de la demande.
 
 Réponds par un seul mot parmi :
 - plombier

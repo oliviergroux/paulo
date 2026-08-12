@@ -136,7 +136,7 @@ export default function PartnerEditForm({
           className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
         >
           <option value="commerce">Commerce</option>
-          <option value="service_local">Service local</option>
+          <option value="artisan">Artisans</option>
           <option value="transport">Transport</option>
         </select>
         <select

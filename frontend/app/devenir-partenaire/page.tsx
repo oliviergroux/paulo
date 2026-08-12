@@ -26,9 +26,9 @@ const PROFILE_COPY = {
     title: "Commerce",
     promise: "Recevez des demandes locales simples et qualifiées.",
   },
-  service_local: {
+  artisan: {
     icon: "🔧",
-    title: "Service local",
+    title: "Artisans",
     promise: "Recevez des demandes de clients proches de chez vous.",
   },
   transport: {

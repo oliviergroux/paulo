@@ -1,4 +1,5 @@
 import type { RequestItem } from "./types";
+import { normalizeRequestCategory } from "./taxonomy";
 
 export function formatDate(date?: string | null): string {
   if (!date) return "—";
@@ -43,13 +44,14 @@ export function formatDayLabel(dateString: string): string {
 }
 
 export function isUrgentRequest(req: Pick<RequestItem, "category">): boolean {
-  return req.category === "service_local" || req.category === "mairie";
+  return normalizeRequestCategory(req.category) === "artisan" || req.category === "mairie";
 }
 
 export function getCategoryClass(category: string): string {
   switch (category) {
     case "commerce":
       return "bg-blue-100 text-blue-700";
+    case "artisan":
     case "service_local":
       return "bg-orange-100 text-orange-700";
     case "mairie":

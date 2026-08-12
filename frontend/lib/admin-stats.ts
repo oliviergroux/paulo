@@ -1,6 +1,11 @@
 import { isPartnerUnanalyzed } from "@/lib/partner-validation";
 import type { PartnerDetail, RequestItem } from "./types";
-import { CATEGORY_LABELS, SUBTYPES, subtypeLabel } from "./taxonomy";
+import {
+  CATEGORY_LABELS,
+  normalizeRequestCategory,
+  SUBTYPES,
+  subtypeLabel,
+} from "./taxonomy";
 
 export type AdminCategoryStat = {
   category: string;
@@ -20,7 +25,7 @@ export type AdminBreakdownStat = {
 
 const OVERVIEW_CATEGORIES = [
   "commerce",
-  "service_local",
+  "artisan",
   "transport",
   "mairie",
   "autre",
@@ -41,10 +46,11 @@ export function computeAdminCategoryStats(
   for (const req of requests) {
     if (req.status !== "new" && req.status !== "in_progress") continue;
 
+    const categoryKey = normalizeRequestCategory(req.category);
     const category = OVERVIEW_CATEGORIES.includes(
-      req.category as (typeof OVERVIEW_CATEGORIES)[number]
+      categoryKey as (typeof OVERVIEW_CATEGORIES)[number]
     )
-      ? req.category
+      ? categoryKey
       : "autre";
     const bucket = counts.get(category)!;
 
@@ -71,7 +77,7 @@ export function computeAdminCategoryStats(
 
 export function computeSubtypeStats(
   requests: RequestItem[],
-  category: "commerce" | "service_local"
+  category: "commerce" | "artisan"
 ): AdminBreakdownStat[] {
   const allowedSubtypes = SUBTYPES[category] || [];
   const counts = new Map<string, { newCount: number; inProgressCount: number }>();
@@ -81,7 +87,7 @@ export function computeSubtypeStats(
   }
 
   for (const req of requests) {
-    if (req.category !== category) continue;
+    if (normalizeRequestCategory(req.category) !== category) continue;
     if (req.status !== "new" && req.status !== "in_progress") continue;
 
     const subtype = allowedSubtypes.includes(req.subtype) ? req.subtype : "autre";
@@ -115,7 +121,7 @@ export function countActiveRequestsByCategory(
 ): number {
   return requests.filter(
     (req) =>
-      req.category === category &&
+      normalizeRequestCategory(req.category) === category &&
       (req.status === "new" || req.status === "in_progress")
   ).length;
 }

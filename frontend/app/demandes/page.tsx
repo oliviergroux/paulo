@@ -290,7 +290,7 @@ export default function DemandesPage() {
           <option value="all">Toutes catégories</option>
           <option value="transport">Transport</option>
           <option value="commerce">Commerce</option>
-          <option value="service_local">Service local</option>
+          <option value="artisan">Artisans</option>
           <option value="mairie">Mairie</option>
         </select>
 

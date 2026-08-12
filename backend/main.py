@@ -38,7 +38,9 @@ from partner_validation import validate_partner_application
 from taxonomy import (
     PARTNER_CATEGORIES,
     build_subtype_classification_prompt,
+    normalize_partner_category,
     normalize_partner_subtype,
+    normalize_request_category,
     normalize_request_subtype,
     validate_mairie_service,
     validate_partner_category_subtype,
@@ -327,7 +329,7 @@ def classify_category(message_text: str):
 Classe cette demande dans UNE seule catégorie parmi :
 - transport : déplacement, taxi, VTC, trajet
 - commerce : achat d'un produit, commande ou rendez-vous chez un commerçant local
-- service_local : prestation d'un professionnel, artisan, travaux, réparation à domicile
+- artisan : prestation d'un professionnel, artisan, travaux, réparation à domicile
 - mairie : problème sur la voie publique, service public, demande administrative ou signalement communal
 - autre
 
@@ -336,13 +338,14 @@ Demande : {message_text}
 Réponds uniquement par le nom exact de la catégorie.
 """
     )
-    return result.output_text.strip().lower()
+    return normalize_request_category(result.output_text.strip().lower())
 
 
 def classify_subtype(category: str, message_text: str):
+    category = normalize_request_category(category)
     prompt = build_subtype_classification_prompt(category, message_text)
 
-    if category.strip().lower() == "transport":
+    if category == "transport":
         return "taxi"
 
     if prompt == "autre":
@@ -1211,7 +1214,7 @@ def get_partners(
 
 @app.post("/partners/apply")
 def create_partner_application(partner: PartnerCreate):
-    category = partner.category.strip().lower()
+    category = normalize_partner_category(partner.category)
     subtype = normalize_partner_subtype(category, partner.subtype.strip().lower())
 
     if category not in PARTNER_CATEGORIES:
@@ -1803,9 +1806,9 @@ def update_partner(partner_id: int, payload: PartnerUpdate, _admin=Depends(requi
                 return {"error": "not_found"}
 
             category = (
-                payload.category.strip().lower()
+                normalize_partner_category(payload.category)
                 if payload.category is not None
-                else existing["category"]
+                else normalize_partner_category(existing["category"])
             )
             subtype = (
                 normalize_partner_subtype(category, payload.subtype.strip().lower())

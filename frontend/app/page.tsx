@@ -56,12 +56,9 @@ export default function AdminDashboardPage() {
     activeCount: row.activeCount,
   }));
   const commerceStats = computeSubtypeStats(requests, "commerce");
-  const serviceLocalStats = computeSubtypeStats(requests, "service_local");
+  const artisanStats = computeSubtypeStats(requests, "artisan");
   const commerceActive = countActiveRequestsByCategory(requests, "commerce");
-  const serviceLocalActive = countActiveRequestsByCategory(
-    requests,
-    "service_local"
-  );
+  const artisanActive = countActiveRequestsByCategory(requests, "artisan");
   const reviewPartners = getPartnersNeedingReview(partners);
   const reviewCount = countPartnersNeedingReview(partners);
   const unanalyzedCount = countUnanalyzedPartners(partners);
@@ -215,11 +212,11 @@ export default function AdminDashboardPage() {
           accentClass="bg-emerald-600"
         />
         <AdminBreakdownChart
-          title="Service local — sous-types"
+          title="Artisans — sous-types"
           subtitle="Plombier, électricien, maçon…"
-          stats={serviceLocalStats}
-          activeTotal={serviceLocalActive}
-          emptyMessage="Aucune demande service local active"
+          stats={artisanStats}
+          activeTotal={artisanActive}
+          emptyMessage="Aucune demande artisan active"
           accentClass="bg-orange-600"
         />
       </div>
